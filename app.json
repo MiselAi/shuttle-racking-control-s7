@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "MiNDX Shuttle S7",
+    "slug": "shuttle-racking-control-s7",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shuttleracking.control.s7"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.shuttleracking.control.s7"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
