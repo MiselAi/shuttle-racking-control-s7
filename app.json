@@ -22,6 +22,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "13f0b992-4349-4bab-a169-7d7a7efaa60a"
+      }
+    },
+    "owner": "miselais-team"
   }
 }
