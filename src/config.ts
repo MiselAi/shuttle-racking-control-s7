@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     { name: 'Shuttle 2', ip: '192.168.0.12' },
   ],
   port: 102,
-  db: 100,
+  db: 1,
   rack: 0,
   slot: 1,
   simulate: true,

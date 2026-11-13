@@ -2,7 +2,7 @@
 
 Versi pembanding dari MiNDX Shuttle: tampilan dan isi data sama, tetapi komunikasi ke
 PLC Siemens S7-1200 memakai **protokol S7 / ISO TCP (port 102, PUT/GET)**, bukan Modbus TCP.
-Peta data untuk programmer PLC: [`docs/S7_MAP.md`](docs/S7_MAP.md) (DB100.DBW0 = "Reg 0").
+Peta data untuk programmer PLC: [`docs/S7_MAP.md`](docs/S7_MAP.md) (DB1.DBW0 = "Reg 0").
 
 Bisa dipasang berdampingan dengan versi Modbus (nama paket berbeda: `com.shuttleracking.control.s7`).
 

@@ -52,7 +52,7 @@ before(async () => {
 after(() => srv.kill());
 
 test('connect, read words, write and read back against python-snap7', async () => {
-  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 100 });
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 1 });
   await c.connect();
   const regs = await c.readHolding(0, 69);
   assert.equal(regs.length, 69);
@@ -75,7 +75,7 @@ test('missing DB gives a readable error', async () => {
 });
 
 test('reading past the end of the DB is rejected', async () => {
-  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 100 });
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 1 });
   await c.connect();
   await assert.rejects(c.readHolding(95, 20), /PLC menolak/);
   c.close();
@@ -84,14 +84,14 @@ test('reading past the end of the DB is rejected', async () => {
 test('silent peer times out', async () => {
   const s = net.createServer(() => undefined);
   await new Promise<void>((r) => s.listen(11103, '127.0.0.1', r));
-  const c = new S7Client(netTransport(), '127.0.0.1', { port: 11103, db: 100, timeoutMs: 200 });
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: 11103, db: 1, timeoutMs: 200 });
   await assert.rejects(c.connect(), /timeout/);
   assert.equal(c.connected, false);
   s.close();
 });
 
 test('refused connection rejects', async () => {
-  const c = new S7Client(netTransport(), '127.0.0.1', { port: 11999, db: 100, timeoutMs: 200 });
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: 11999, db: 1, timeoutMs: 200 });
   await assert.rejects(c.connect());
 });
 
@@ -121,7 +121,7 @@ function fakeNative(): NativeIsoTcp {
 }
 
 test('phone path (native transport) reads and writes against python-snap7', async () => {
-  const c = new S7Client(makeNativeTransport(fakeNative()), '127.0.0.1', { port: PORT, db: 100 });
+  const c = new S7Client(makeNativeTransport(fakeNative()), '127.0.0.1', { port: PORT, db: 1 });
   await c.connect();
   await c.writeSingle(49, 777);
   assert.deepEqual(await c.readHolding(49, 1), [777]);
