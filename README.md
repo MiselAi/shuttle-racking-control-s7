@@ -10,6 +10,7 @@ Bisa dipasang berdampingan dengan versi Modbus (nama paket berbeda: `com.shuttle
 - Login PIN dua level: **Operator** (Operasi) dan **Maintenance** (Operasi, Manual, Setting PLC, Pengaturan).
 - Operasi: Load (Load-1 / Load-N sampai lajur penuh), Pick (Pick-1 / Pick-N sampai lajur kosong), Shuffle, Start (dengan konfirmasi), Stop, Reset alarm, tombol Buzzer ON/OFF (enable fungsi buzzer), status.
 - Alarm: daftar alarm aktif (EMERGENCY dan kode alarm PLC) dengan jam mulai, Reset alarm, Buzzer.
+- Tema warna MiNDX (navy, biru, kuning) dan footer copyright PT. Mitrainti Sejahtera Eletrindo (logo MISEL).
 - Tampilan landscape: menu di samping kiri, isi layar dua kolom. Tombol, teks dan lampu status membesar otomatis di tablet (skala 1× di HP sampai 1,6× di tablet besar).
 - Manual: tombol tahan Maju / Mundur / Lifter UP / DOWN, Back to Home.
 - Setting PLC: setting dikelompokkan (Speed Auto, Speed Manual, Posisi), disimpan per grup, dengan batas min/max.

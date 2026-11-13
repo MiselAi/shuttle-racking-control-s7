@@ -4,7 +4,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppConfig, loadConfig, saveConfig } from './src/config';
 import { AlarmScreen, LOGO_MARK, LoginScreen, ManualScreen, OperasiScreen, PengaturanScreen, SettingPlcScreen, useActiveAlarms } from './src/screens';
-import { Btn, C, s, useScale } from './src/ui';
+import { Btn, C, Copyright, s, useScale } from './src/ui';
 import { useShuttle } from './src/useShuttle';
 
 type Role = 'operator' | 'maintenance';
@@ -66,10 +66,11 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
 
   const tabs = TABS.filter((t) => role === 'maintenance' || !t.maint);
   return (
+    <View style={{ flex: 1 }}>
     <View style={{ flex: 1, flexDirection: 'row' }}>
       {/* Side menu (landscape) */}
-      <View style={{ width: 132 * k, backgroundColor: C.card, borderRightWidth: 1, borderColor: C.line }}>
-        <View style={{ padding: 10, alignItems: 'center', borderBottomWidth: 1, borderColor: C.line }}>
+      <View style={{ width: 132 * k, backgroundColor: C.sideBg, borderRightWidth: 1, borderColor: C.line }}>
+        <View style={{ padding: 10, alignItems: 'center', backgroundColor: C.card, borderBottomWidth: 4, borderColor: C.yellow }}>
           <Image source={LOGO_MARK} style={{ width: 96 * k, height: 68 * k }} resizeMode="contain" accessibilityLabel="MiNDX" />
           <Text style={{ color: C.ink, fontSize: 13 * k, fontWeight: '800', marginTop: 4 }}>Shuttle S7</Text>
           <Text style={{ color: C.muted, fontSize: 12 * k }}>{role === 'maintenance' ? 'Maintenance' : 'Operator'}</Text>
@@ -84,9 +85,9 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
                 onPress={() => setTab(t.key)}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
-                style={{ paddingVertical: 16 * k, paddingHorizontal: 12, borderLeftWidth: 4, borderColor: on ? C.brand : 'transparent', backgroundColor: on ? '#E3EDF2' : undefined }}
+                style={{ paddingVertical: 16 * k, paddingHorizontal: 12, borderLeftWidth: 5, borderColor: on ? C.yellow : 'transparent', backgroundColor: on ? C.sideActiveBg : undefined }}
               >
-                <Text style={{ fontWeight: on ? '800' : '500', color: alarm ? C.red : on ? C.brand : C.muted, fontSize: 15 * k }}>
+                <Text style={{ fontWeight: on ? '800' : '500', color: alarm ? (on ? C.red : '#FF6B5B') : on ? C.sideActiveText : C.sideText, fontSize: 15 * k }}>
                   {alarm ? `● Alarm (${alarms.length})` : t.label}
                 </Text>
               </Pressable>
@@ -94,21 +95,21 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
           })}
         </ScrollView>
         <Pressable onPress={onLogout} accessibilityRole="button" style={{ padding: 14 * k, borderTopWidth: 1, borderColor: C.line }}>
-          <Text style={{ color: C.red, fontWeight: '700', fontSize: 14 * k }}>Keluar</Text>
+          <Text style={{ color: C.sideLogout, fontWeight: '700', fontSize: 14 * k }}>Keluar</Text>
         </Pressable>
       </View>
 
       <View style={{ flex: 1 }}>
         {/* Top bar: shuttle choice + connection */}
-        <View style={{ backgroundColor: C.brand, paddingHorizontal: 12, paddingVertical: 8 * k, minHeight: 64 * k, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ backgroundColor: C.topBg, borderBottomWidth: 4, borderColor: C.yellow, paddingHorizontal: 12, paddingVertical: 8 * k, minHeight: 64 * k, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           {cfg.shuttles.map((x, i) => (
             <View key={i} style={{ width: 150 * k }}>
-              <Btn label={i === idx ? `● ${x.name}` : x.name} color={i === idx ? '#08394E' : '#3A84A3'} onPress={() => setIdx(i)} />
+              <Btn label={i === idx ? `● ${x.name}` : x.name} color={i === idx ? C.chipOn : C.chipOff} textColor={i === idx ? C.chipOnText : C.chipOffText} onPress={() => setIdx(i)} />
             </View>
           ))}
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
             {cfg.simulate ? (
-              <View style={{ backgroundColor: C.amber, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 }}>
+              <View style={{ backgroundColor: C.yellow, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 }}>
                 <Text style={{ fontWeight: '800', color: C.ink, fontSize: 12 * k }}>SIMULASI</Text>
               </View>
             ) : null}
@@ -143,6 +144,8 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
           </View>
         ) : null}
       </View>
+    </View>
+    <Copyright />
     </View>
   );
 }

@@ -5,7 +5,7 @@ export const LOGO_FULL = require('../assets/brand/logo-full.png');
 export const LOGO_MARK = require('../assets/brand/logo-mark.png');
 import { AppConfig, isValidIp } from './config';
 import { MODE_REQ, MODES, Mode, QTY_REQ, SETTING_GROUPS } from './registers';
-import { Btn, C, Card, Cols, HoldBtn, Lamp, s, useZoom } from './ui';
+import { Btn, C, Card, Cols, Copyright, HoldBtn, Lamp, s, useZoom } from './ui';
 import type { useShuttle } from './useShuttle';
 
 type Sh = ReturnType<typeof useShuttle>;
@@ -23,6 +23,7 @@ export function LoginScreen({ cfg, onLogin }: { cfg: AppConfig; onLogin: (role: 
     setPin('');
   };
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }} keyboardShouldPersistTaps="handled">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 40 }}>
         <View style={{ alignItems: 'center' }}>
@@ -50,6 +51,8 @@ export function LoginScreen({ cfg, onLogin }: { cfg: AppConfig; onLogin: (role: 
         </View>
       </View>
     </ScrollView>
+    <Copyright />
+    </View>
   );
 }
 

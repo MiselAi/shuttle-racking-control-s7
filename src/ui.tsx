@@ -1,17 +1,30 @@
 import { ReactNode, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 export const C = {
-  bg: '#EEF1F4',
-  card: '#FFFFFF',
-  ink: '#16202A',
-  muted: '#5F6B78',
-  line: '#D5DBE1',
-  brand: '#0E5A7A',
-  green: '#1E9E4A',
-  red: '#D23B2E',
-  amber: '#E8A317',
-  off: '#B9C1C9',
+  'bg': '#EEF2F8',
+  'card': '#FFFFFF',
+  'ink': '#0F1E3D',
+  'muted': '#5B6B85',
+  'line': '#D6DEEA',
+  'brand': '#0057B8',
+  'green': '#1E9E4A',
+  'red': '#D23B2E',
+  'amber': '#F07C00',
+  'off': '#BCC6D6',
+  'navy': '#0B2A63',
+  'yellow': '#F5B400',
+  'sideBg': '#0B2A63',
+  'sideText': '#C9D6EE',
+  'sideActiveBg': '#16397F',
+  'sideActiveText': '#FFFFFF',
+  'sideLogout': '#FFB0A6',
+  'topBg': '#0057B8',
+  'chipOn': '#F5B400',
+  'chipOnText': '#0B2A63',
+  'chipOff': '#2F72C9',
+  'chipOffText': '#FFFFFF',
+  'title': '#0B2A63'
 };
 
 // Size factor: 1 on phones, grows up to 1.6 on tablets so buttons and text fill the screen.
@@ -29,6 +42,31 @@ export function useZoom() {
     label: { fontSize: 14 * k },
     input: { fontSize: 16 * k, paddingVertical: 8 * k },
   };
+}
+
+const LOGO_MISEL = require('../assets/brand/misel-logo.png');
+
+// Copyright footer: one flat line across the bottom of the screen.
+export function Copyright() {
+  const k = useScale();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10 * k,
+        paddingVertical: 4 * k,
+        backgroundColor: C.card,
+        borderTopWidth: 3,
+        borderColor: C.yellow,
+      }}
+    >
+      <Text style={{ fontSize: 12 * k, color: C.muted }}>Copyright © 2026</Text>
+      <Image source={LOGO_MISEL} style={{ width: 66 * k, height: 29 * k }} resizeMode="contain" accessibilityLabel="MISEL" />
+      <Text style={{ fontSize: 12 * k, fontWeight: '700', color: C.ink }}>PT. Mitrainti Sejahtera Eletrindo</Text>
+    </View>
+  );
 }
 
 export function Lamp({ on, label, color = C.green }: { on: boolean; label: string; color?: string }) {
@@ -51,9 +89,10 @@ type BtnProps = {
   disabled?: boolean;
   big?: boolean;
   outline?: boolean;
+  textColor?: string;
 };
 
-export function Btn({ label, onPress, color = C.brand, disabled, big, outline }: BtnProps) {
+export function Btn({ label, onPress, color = C.brand, disabled, big, outline, textColor }: BtnProps) {
   const k = useScale();
   return (
     <Pressable
@@ -67,7 +106,7 @@ export function Btn({ label, onPress, color = C.brand, disabled, big, outline }:
         (pressed || disabled) && { opacity: disabled ? 0.4 : 0.75 },
       ]}
     >
-      <Text style={[s.btnText, { fontSize: (big ? 20 : 16) * k }, outline && { color }]}>{label}</Text>
+      <Text style={[s.btnText, { fontSize: (big ? 20 : 16) * k }, textColor ? { color: textColor } : null, outline && { color }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -117,7 +156,7 @@ export function Card({ title, children }: { title?: string; children: ReactNode 
   const k = useScale();
   return (
     <View style={[s.card, { padding: 14 * k, marginBottom: 12 * k }]}>
-      {title ? <Text style={[s.cardTitle, { fontSize: 13 * k }]}>{title}</Text> : null}
+      {title ? <Text style={[s.cardTitle, { fontSize: 13 * k, color: C.title }]}>{title}</Text> : null}
       {children}
     </View>
   );
