@@ -71,33 +71,52 @@ export class S7Client {
     this.drop();
   }
 
-  // Read `count` words starting at word `start` (DBW start*2).
-  readHolding(start: number, count: number): Promise<number[]> {
+  // Read `count` words starting at word `start` (DBW start*2) of the default DB.
+  async readHolding(start: number, count: number): Promise<number[]> {
+    const bytes = await this.readBytes(this.opts.db, start * 2, count * 2);
+    return Array.from({ length: count }, (_, i) => u16(bytes, i * 2));
+  }
+
+  // Write one word at word `addr` (DBW addr*2) of the default DB.
+  writeSingle(addr: number, value: number): Promise<void> {
+    return this.writeWord(this.opts.db, addr * 2, value);
+  }
+
+  // Read `len` bytes of DB `db` from byte `byte`.
+  readBytes(db: number, byte: number, len: number): Promise<Uint8Array> {
     return this.serial(async () => {
-      const { param, data } = await this.job([0x04, 1, ...this.item(start * 2, count * 2)], []);
+      const { param, data } = await this.job([0x04, 1, ...this.item(db, byte, len)], []);
       if (param[0] !== 0x04) throw new Error('Jawaban baca S7 tidak valid');
       this.checkItem(data[0]);
       const bytes = data.subarray(4);
-      if (bytes.length < count * 2) throw new Error('Jawaban PLC tidak lengkap');
-      return Array.from({ length: count }, (_, i) => u16(bytes, i * 2));
+      if (bytes.length < len) throw new Error('Jawaban PLC tidak lengkap');
+      return bytes.slice(0, len);
     });
   }
 
-  // Write one word at word `addr` (DBW addr*2).
-  writeSingle(addr: number, value: number): Promise<void> {
+  // DBW write (big-endian word).
+  writeWord(db: number, byte: number, value: number): Promise<void> {
     const v = value & 0xffff;
     return this.serial(async () => {
-      const { param, data } = await this.job([0x05, 1, ...this.item(addr * 2, 2)], [0, 0x04, 0, 16, v >> 8, v & 0xff]);
+      const { param, data } = await this.job([0x05, 1, ...this.item(db, byte, 2)], [0, 0x04, 0, 16, v >> 8, v & 0xff]);
       if (param[0] !== 0x05) throw new Error('Jawaban tulis S7 tidak valid');
       this.checkItem(data[0]);
     });
   }
 
-  // S7ANY item: BYTE transport, `len` bytes, DB area (0x84), bit address = byteOffset*8.
-  private item(byteOffset: number, len: number) {
-    const bit = byteOffset * 8;
-    const db = this.opts.db;
-    return [0x12, 0x0a, 0x10, 0x02, len >> 8, len & 0xff, db >> 8, db & 0xff, 0x84, (bit >> 16) & 0xff, (bit >> 8) & 0xff, bit & 0xff];
+  // DBX write: S7 writes a single bit natively, other bits of the byte are untouched.
+  writeBit(db: number, byte: number, bit: number, on: boolean): Promise<void> {
+    return this.serial(async () => {
+      const { param, data } = await this.job([0x05, 1, ...this.item(db, byte, 1, 0x01, bit)], [0, 0x03, 0, 1, on ? 1 : 0]);
+      if (param[0] !== 0x05) throw new Error('Jawaban tulis S7 tidak valid');
+      this.checkItem(data[0]);
+    });
+  }
+
+  // S7ANY item in a DB (area 0x84): `transport` 0x02 = BYTE (len bytes) or 0x01 = BIT (len 1).
+  private item(db: number, byteOffset: number, len: number, transport = 0x02, bitIndex = 0) {
+    const addr = byteOffset * 8 + bitIndex;
+    return [0x12, 0x0a, 0x10, transport, len >> 8, len & 0xff, db >> 8, db & 0xff, 0x84, (addr >> 16) & 0xff, (addr >> 8) & 0xff, addr & 0xff];
   }
 
   private checkItem(code: number) {

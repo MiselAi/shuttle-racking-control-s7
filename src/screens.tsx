@@ -370,7 +370,8 @@ export function PengaturanScreen({ cfg, onSave }: { cfg: AppConfig; onSave: (c: 
   const [msg, setMsg] = useState('');
   useEffect(() => setD(cfg), [cfg]);
   const ipsOk = d.shuttles.every((x) => isValidIp(x.ip) && x.name.trim());
-  const pinsOk = /^\d{4,8}$/.test(d.pinOperator) && /^\d{4,8}$/.test(d.pinMaintenance) && d.pinOperator !== d.pinMaintenance;
+  const pins = [d.pinOperator, d.pinMaintenance, d.pinAdmin];
+  const pinsOk = pins.every((p) => /^\d{4,8}$/.test(p)) && new Set(pins).size === 3;
   const portOk = d.port >= 1 && d.port <= 65535 && d.db >= 1 && d.db <= 65535 && d.rack <= 7 && d.slot <= 31;
   const setSh = (i: number, k: 'name' | 'ip', v: string) =>
     setD((x) => ({ ...x, shuttles: x.shuttles.map((y, j) => (j === i ? { ...y, [k]: v } : y)) }));
@@ -412,7 +413,7 @@ export function PengaturanScreen({ cfg, onSave }: { cfg: AppConfig; onSave: (c: 
             <TextInput style={[s.input, z.input]} keyboardType="number-pad" value={String(d.slot)} onChangeText={(v) => setD({ ...d, slot: Number(v.replace(/\D/g, '')) })} accessibilityLabel="Slot" />
           </View>
         </View>
-        <Text style={[s.note, z.note, { marginTop: 6 }]}>S7-1200: rack 0, slot 1. DB harus non-optimized dan PLC mengizinkan PUT/GET.</Text>
+        <Text style={[s.note, z.note, { marginTop: 6 }]}>S7-1200: rack 0, slot 1. DB harus non-optimized dan PLC mengizinkan PUT/GET. Nomor DB = DB untuk alamat default (bisa diubah per item di Peta Alamat).</Text>
       </Card>
       </View>
       <View>
@@ -421,7 +422,9 @@ export function PengaturanScreen({ cfg, onSave }: { cfg: AppConfig; onSave: (c: 
         <TextInput style={[s.input, z.input, { marginBottom: 10 }]} keyboardType="number-pad" value={d.pinOperator} onChangeText={(v) => setD({ ...d, pinOperator: v.replace(/\D/g, '') })} maxLength={8} />
         <Text style={[s.label, z.label]}>PIN Maintenance</Text>
         <TextInput style={[s.input, z.input]} keyboardType="number-pad" value={d.pinMaintenance} onChangeText={(v) => setD({ ...d, pinMaintenance: v.replace(/\D/g, '') })} maxLength={8} />
-        <Text style={[s.note, z.note, { marginTop: 6 }]}>4–8 angka, dan kedua PIN harus berbeda.</Text>
+        <Text style={[s.label, z.label, { marginTop: 10 }]}>PIN Admin (Peta Alamat)</Text>
+        <TextInput style={[s.input, z.input]} keyboardType="number-pad" value={d.pinAdmin} onChangeText={(v) => setD({ ...d, pinAdmin: v.replace(/\D/g, '') })} maxLength={8} accessibilityLabel="PIN Admin baru" />
+        <Text style={[s.note, z.note, { marginTop: 6 }]}>4–8 angka, dan ketiga PIN harus berbeda.</Text>
       </Card>
       <Card title="Mode simulasi">
         <Pressable style={[s.row, { alignItems: 'center', justifyContent: 'space-between' }]} onPress={() => setD({ ...d, simulate: !d.simulate })}>

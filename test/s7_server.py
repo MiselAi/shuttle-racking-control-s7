@@ -9,6 +9,8 @@ for i in range(100):
     db[i * 2:i * 2 + 2] = (i * 10).to_bytes(2, 'big')
 srv = Server()
 srv.register_area(SrvArea.DB, 1, db)
+db2 = bytearray(50)
+srv.register_area(SrvArea.DB, 2, db2)
 srv.start(tcp_port=port)
 print('ready', flush=True)
 try:

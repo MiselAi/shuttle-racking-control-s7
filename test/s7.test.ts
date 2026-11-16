@@ -128,3 +128,64 @@ test('phone path (native transport) reads and writes against python-snap7', asyn
   assert.equal((await c.readHolding(0, 69)).length, 69);
   c.close();
 });
+
+// Address map end to end: native S7 bit writes, bits and words across two DBs.
+import { s7Io } from '../src/io.ts';
+import { defaultMap } from '../src/addressMap.ts';
+
+test('S7 writeBit sends a native single-bit write (DBX)', async () => {
+  // python-snap7's test server writes a bit as a whole byte, so check the frame itself;
+  // a real S7 PLC changes only the addressed bit.
+  const sent: Uint8Array[] = [];
+  const fake: FrameTransport = {
+    async open() {},
+    async request(frame) {
+      sent.push(frame);
+      if (frame[5] === 0xe0) return new Uint8Array([3, 0, 0, 11, 6, 0xd0, 0, 1, 0, 1, 0]);
+      const ref = [frame[11], frame[12]];
+      if (frame[17] === 0xf0) return new Uint8Array([3, 0, 0, 27, 2, 0xf0, 0x80, 0x32, 3, 0, 0, ...ref, 0, 8, 0, 0, 0, 0, 0xf0, 0, 0, 1, 0, 1, 1, 0xe0]);
+      return new Uint8Array([3, 0, 0, 22, 2, 0xf0, 0x80, 0x32, 3, 0, 0, ...ref, 0, 2, 0, 1, 0, 0, 5, 1, 0xff]);
+    },
+    close() {},
+  };
+  const c = new S7Client(fake, '127.0.0.1', { db: 1 });
+  await c.connect();
+  await c.writeBit(7, 181, 3, true);
+  const f = sent[sent.length - 1];
+  const item = [...f.subarray(19, 31)];
+  const addr = 181 * 8 + 3;
+  assert.deepEqual(item, [0x12, 0x0a, 0x10, 0x01, 0, 1, 0, 7, 0x84, (addr >> 16) & 0xff, (addr >> 8) & 0xff, addr & 0xff]);
+  assert.deepEqual([...f.subarray(31)], [0, 0x03, 0, 1, 1]); // BIT data, length 1, value 1
+});
+
+test('S7 bit writes reach the right byte on python-snap7', async () => {
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 1 });
+  await c.connect();
+  await c.writeBit(1, 180, 0, true);
+  await c.writeBit(1, 181, 7, true);
+  assert.deepEqual([...(await c.readBytes(1, 180, 2))].map((b) => b !== 0), [true, true]);
+  c.close();
+});
+
+test('address map over S7: bit commands, moved words, second DB', async () => {
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 1 });
+  await c.connect();
+  // one bit per byte here: the test server overwrites the whole byte on a bit write
+  const map = { ...defaultMap('s7'), 'cmd.start': 'DB1.DBX190.0', 'cmd.stop': 'DB1.DBX191.1', 'st.run': 'DB2.DBX10.3', 'sys.heartbeat': 'DB2.DBW20' };
+  const io = s7Io(c, map);
+  await io.writeReg(20, 1); // Start -> DB1.DBX190.0
+  await io.writeReg(21, 1); // Stop -> DB1.DBX191.1
+  await io.writeReg(20, 0);
+  await io.writeReg(49, 4242); // heartbeat -> DB2.DBW20
+  assert.deepEqual([...(await c.readBytes(2, 20, 2))], [4242 >> 8, 4242 & 0xff]);
+  await c.writeWord(2, 10, 0b1000 << 8); // DB2.DBX10.3 set by the 'PLC' (byte 10 = high byte)
+  await c.writeWord(1, 190, 0b10); // byte 190 = 0 (Start off), byte 191 bit 1 = Stop on
+  await c.writeWord(1, 2, 85); // High speed auto default DB1.DBW2
+  const r = await io.poll();
+  assert.equal(r[51], 1); // RUN from DB2.DBX10.3
+  assert.equal(r[21], 1); // Stop bit
+  assert.equal(r[20], 0); // Start bit cleared
+  assert.equal(r[49], 4242);
+  assert.equal(r[1], 85);
+  c.close();
+});

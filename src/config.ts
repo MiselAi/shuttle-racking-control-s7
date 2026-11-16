@@ -10,6 +10,8 @@ export type AppConfig = {
   simulate: boolean;
   pinOperator: string;
   pinMaintenance: string;
+  pinAdmin: string; // opens the address map screen
+  addrMaps: Record<string, Record<string, string>>; // shuttle index -> item id -> address
 };
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -24,6 +26,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   simulate: true,
   pinOperator: '1111',
   pinMaintenance: '9999',
+  pinAdmin: '0000',
+  addrMaps: {},
 };
 
 const KEY = 'app-config-v1';

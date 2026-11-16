@@ -6,6 +6,7 @@ import { AppConfig, loadConfig, saveConfig } from './src/config';
 import { AlarmScreen, LOGO_MARK, LoginScreen, ManualScreen, OperasiScreen, PengaturanScreen, SettingPlcScreen, useActiveAlarms } from './src/screens';
 import { Btn, C, Copyright, s, useScale } from './src/ui';
 import { useShuttle } from './src/useShuttle';
+import { AddressMapScreen } from './src/AddressMapScreen';
 
 type Role = 'operator' | 'maintenance';
 const TABS = [
@@ -13,6 +14,7 @@ const TABS = [
   { key: 'alarm', label: 'Alarm', maint: false },
   { key: 'manual', label: 'Manual', maint: true },
   { key: 'plc', label: 'Setting PLC', maint: true },
+  { key: 'peta', label: 'Peta Alamat', maint: true },
   { key: 'app', label: 'Pengaturan', maint: true },
 ] as const;
 type Tab = (typeof TABS)[number]['key'];
@@ -123,7 +125,9 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
         </View>
 
         <View style={{ flex: 1 }}>
-          {tab === 'app' ? (
+          {tab === 'peta' ? (
+            <AddressMapScreen protocol="s7" cfg={cfg} onSave={onSave} current={idx} regs={sh.regs} run={run} db={cfg.db} />
+          ) : tab === 'app' ? (
             <PengaturanScreen cfg={cfg} onSave={onSave} />
           ) : !sh.status ? (
             <Text style={[s.note, { padding: 24, textAlign: 'center' }]}>Menunggu data dari shuttle…</Text>

@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.5
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.6
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -151,7 +151,28 @@ APK membaca `DB1.DBB0`–`DBB137` (69 word) sekali tiap 200 ms dalam satu permin
 
 ---
 
-## 6. Yang masih terbuka [?]
+## 6. Peta Alamat di APK (alamat bisa diubah tanpa ubah program APK)
+
+Semua alamat di dokumen ini adalah **alamat default**. Di APK (menu **Peta Alamat**, perlu **PIN Admin**)
+setiap item bisa dipindah ke alamat lain **di DB mana pun** (tidak di M), per shuttle, dan dipilih tipenya:
+
+| Tipe | Format | Contoh | Boleh untuk |
+|---|---|---|---|
+| WORD | `DBn.DBWbyte` | `DB1.DBW40` | semua item |
+| BIT | `DBn.DBXbyte.bit` (bit 0-7) | `DB1.DBX200.0` | item ON/OFF saja (perintah, gerak manual, lampu status) |
+
+Item angka (setting, mode, jumlah N, heartbeat, counter, kode alarm/pesan) selalu WORD.
+
+- Bit ditulis langsung oleh protokol S7 (tulis 1 bit), jadi bit lain di byte yang sama **tidak** ikut berubah.
+- Semua DB yang dipakai harus **non-optimized**, dan PUT/GET tetap harus diizinkan.
+- Watchdog tetap membaca **alamat heartbeat yang dipakai di Peta Alamat** (default `DB1.DBW98`).
+- "Nomor DB" di menu Pengaturan dipakai untuk alamat default; alamat yang sudah disimpan di Peta Alamat tidak ikut berubah.
+
+Peta Alamat bisa diekspor/diimpor sebagai **CSV** (kolom `id,grup,item,tipe,alamat`). Kolom `id` tidak boleh diubah.
+
+---
+
+## 7. Yang masih terbuka [?]
 
 1. Definisi mode Shuffle.
 2. Daftar kode alarm → pesan, dan daftar kode pesan status.

@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { AppConfig } from './config';
+import { effectiveMap } from './addressMap';
+import { Io, registerIo, s7Io } from './io';
 import { S7Client } from './s7';
-import { CMD, Cmd, decodeStatus, HEARTBEAT, JOG, Jog, READ_COUNT } from './registers';
+import { CMD, Cmd, decodeStatus, HEARTBEAT, JOG, Jog } from './registers';
 import { SimulatedShuttle } from './simulator';
-
-type Link = Pick<S7Client, 'connect' | 'close' | 'readHolding' | 'writeSingle' | 'connected' | 'onClose'>;
 
 const CYCLE_MS = 200; // heartbeat + status read; PLC watchdog trips after 500 ms
 const RETRY_MS = 2000;
 
-function makeLink(cfg: AppConfig, ip: string): Link {
-  if (cfg.simulate) return new SimulatedShuttle();
+function makeLink(cfg: AppConfig, ip: string, index: number): Io {
+  // The simulator always uses the default addresses.
+  if (cfg.simulate) return registerIo(new SimulatedShuttle());
   // Loaded only off-simulation: the native module does not exist on web.
   const native = require('../modules/iso-tcp').default;
   const transport = require('./nativeTransport').makeNativeTransport(native);
-  return new S7Client(transport, ip, { port: cfg.port, db: cfg.db, rack: cfg.rack, slot: cfg.slot });
+  const client = new S7Client(transport, ip, { port: cfg.port, db: cfg.db, rack: cfg.rack, slot: cfg.slot });
+  return s7Io(client, effectiveMap('s7', cfg.addrMaps[String(index)], cfg.db));
 }
 
 export function useShuttle(cfg: AppConfig, index: number) {
@@ -23,16 +25,16 @@ export function useShuttle(cfg: AppConfig, index: number) {
   const [regs, setRegs] = useState<number[] | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const link = useRef<Link | null>(null);
+  const link = useRef<Io | null>(null);
 
   useEffect(() => {
     let alive = true;
     let active = AppState.currentState === 'active';
     let beat = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let l: Link;
+    let l: Io;
     try {
-      l = makeLink(cfg, ip);
+      l = makeLink(cfg, ip, index);
     } catch (e) {
       // Never crash the app on a missing/broken native module: show it and stay usable.
       setConnected(false);
@@ -52,8 +54,8 @@ export function useShuttle(cfg: AppConfig, index: number) {
           setError(null);
         }
         beat = (beat + 1) % 32768;
-        await l.writeSingle(HEARTBEAT, beat);
-        const r = await l.readHolding(0, READ_COUNT);
+        await l.writeReg(HEARTBEAT, beat);
+        const r = await l.poll();
         if (!alive) return;
         setRegs(r);
         setConnected(true);
@@ -81,16 +83,16 @@ export function useShuttle(cfg: AppConfig, index: number) {
       alive = false;
       clearTimeout(timer);
       sub.remove();
-      const off = Object.values(JOG).map((a) => l.writeSingle(a, 0).catch(() => undefined));
+      const off = Object.values(JOG).map((a) => l.writeReg(a, 0).catch(() => undefined));
       Promise.all(off).finally(() => l.close());
       link.current = null;
     };
-  }, [cfg, ip]);
+  }, [cfg, ip, index]);
 
   const write = useCallback(async (reg: number, value: number) => {
     const l = link.current;
     if (!l?.connected) throw new Error('Shuttle belum terhubung');
-    await l.writeSingle(reg, value);
+    await l.writeReg(reg, value);
   }, []);
 
   const sendCmd = useCallback((c: Cmd) => write(CMD[c], 1), [write]);
