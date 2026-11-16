@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.6
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.7
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -79,7 +79,7 @@ min/max sendiri**; APK juga membatasi.
 | 31 | DB1.DBW62 | Jog Lifter DOWN | **tahan** | Maintenance | V349.0 |
 | 32 | DB1.DBW64 | Jog MAJU (forward) | **tahan** | Maintenance | V347.0 |
 | 33 | DB1.DBW66 | Jog MUNDUR (reverse) | **tahan** | Maintenance | V346.0 |
-| 40 | DB1.DBW80 | Mode diminta (lihat §4) | nilai | Operator / Maintenance | — |
+| 40 | DB1.DBW80 | *dicadangkan* (dulu Mode diminta — tidak dipakai APK; mode langsung ditulis ke Reg[65]) | — | — | — |
 | 41 | DB1.DBW82 | Jumlah palet N (lihat §4) | nilai | Operator | — |
 | 49 | DB1.DBW98 | **Heartbeat** — APK menaikkan nilai tiap 200 ms | nilai | otomatis | — |
 
@@ -96,28 +96,32 @@ supaya watchdog PLC langsung bekerja.
 
 ---
 
-## 4. Ide pemilihan mode (usulan)
+## 4. Mode kerja (sesuai program PLC)
 
-Di HMI lama, Load 1 / Load N / Pick 1 / Pick N / Shuffle memakai tombol Start yang sama.
-Usulan: **satu register mode + satu register jumlah**. Di APK, tombol **Load** membuka pilihan **Load-1 / Load-N**, dan **Pick** membuka **Pick-1 / Pick-N**. Load-1/Pick-1 mengirim **N = 1**. Load-N/Pick-N mengirim **N = 0**, artinya **jalan terus sampai lajur penuh (Load) atau kosong (Pick)**.
+APK menulis **kode mode langsung ke `Reg[65]` (Mode aktif, DB1.DBW130)** dan membaca nilai yang sama untuk
+menampilkan mode yang sedang aktif. Tidak ada lagi register "Mode diminta".
 
-| `Reg[40]` | Mode | `Reg[41]` (N) |
+| Kode di `Reg[65]` | Mode | Tombol di APK |
 |---|---|---|
 | 0 | Belum dipilih | — |
-| 1 | **Load** (masukkan palet ke lajur) | 1 = Load-1, 0 = Load-N (sampai lajur penuh) |
-| 2 | **Pick** (ambil palet dari lajur) | 1 = Pick-1, 0 = Pick-N (sampai lajur kosong) |
-| 3 | **Shuffle** **[?] definisi** | diabaikan |
-| 4 | **Manual** (maintenance) | diabaikan |
+| **2** | **Load-1** | Load → Load-1 |
+| **3** | **Load-N** (sampai lajur penuh) | Load → Load-N |
+| **4** | **Manual** | Manual → Masuk Mode Manual |
+| **5** | **Shuffle** | Shuffle |
+| **6** | **Pick-1** | Pick → Pick-1 |
+| **7** | **Pick-N** (sampai lajur kosong) | Pick → Pick-N |
 
-Alur yang diharapkan di PLC:
-1. APK menulis `Reg[40]`. PLC **hanya menerima ganti mode saat shuttle IDLE** dan
-   menyalinnya ke `Reg[65]` (mode aktif). Saat RUN, permintaan ganti mode diabaikan.
-2. Saat Start (`Reg[20]` = 1): PLC cek mode aktif 1–3, IDLE, tidak emergency, tidak
-   ada alarm → ambil N dari `Reg[41]`, salin ke `Reg[66]`, nolkan `Reg[67]`, mulai RUN.
-   Jika lajur sudah penuh (Load) / kosong (Pick) saat Start: jangan RUN, isi kode alarm di `Reg[64]`.
+Saat Start, APK juga tetap menulis `Reg[41]` (N): 1 untuk Load-1/Pick-1, 0 untuk Load-N/Pick-N
+(boleh diabaikan PLC karena varian sudah ada di kode mode).
+
+Pengaman:
+1. APK **hanya mengizinkan ganti mode saat shuttle tidak RUN** (tombol mode dikunci saat RUN).
+   PLC tetap **wajib** menolak/mengabaikan perubahan `Reg[65]` saat RUN.
+2. Saat Start (`Reg[20]` = 1): PLC cek mode 2/3/5/6/7, IDLE, tidak emergency, tidak ada alarm → mulai RUN.
+   Jika lajur sudah penuh (Load) / kosong (Pick): jangan RUN, isi kode alarm di `Reg[64]`.
    Jika syarat tidak terpenuhi: Start diabaikan (tetap tulis balik `0`).
-3. Tiap palet selesai: `Reg[67]` +1. Selesai dan kembali IDLE jika: N = 1 dan 1 palet selesai, atau N = 0 dan lajur sudah penuh (Load) / kosong (Pick).
-4. Stop kapan saja menghentikan RUN.
+3. Tombol gerak manual di APK hanya aktif jika `Reg[65]` = 4, tidak RUN, dan tidak EMERGENCY.
+4. Tiap palet selesai: `Reg[67]` +1. Stop kapan saja menghentikan RUN.
 
 ---
 
@@ -142,7 +146,7 @@ PLC menulis tiap scan. `1` = aktif.
 | 62 | DB1.DBW124 | Fungsi buzzer enable (1 = ON) — ditampilkan di tombol Buzzer | V362.0 |
 | 63 | DB1.DBW126 | Counter palet — *tidak ditampilkan APK (v0.3)*, boleh tetap diisi | VW570 |
 | 64 | DB1.DBW128 | Kode alarm aktif (0 = tidak ada) — ditampilkan di layar Alarm **[?] daftar kode** | — |
-| 65 | DB1.DBW130 | Mode aktif (0–4, lihat §4) | — |
+| 65 | DB1.DBW130 | **Mode aktif — DITULIS APK** (kode mode, lihat §4) dan dibaca kembali | — |
 | 66 | DB1.DBW132 | N job berjalan (1, atau 0 = sampai penuh/kosong) | — |
 | 67 | DB1.DBW134 | Palet selesai di job berjalan | — |
 | 68 | DB1.DBW136 | Kode pesan status (teks "####") **[?]** | — |

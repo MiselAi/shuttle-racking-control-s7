@@ -41,12 +41,18 @@ export type Cmd = keyof typeof CMD;
 export const JOG = { lifterUp: 30, lifterDown: 31, forward: 32, reverse: 33 } as const;
 export type Jog = keyof typeof JOG;
 
-export const MODE_REQ = 40;
+// Mode: the app writes the mode code straight into the PLC's active-mode word (Reg 65), and reads it back.
+export const MODE = 65;
 export const QTY_REQ = 41;
 export const HEARTBEAT = 49;
 
-export const MODES = { 0: 'Belum dipilih', 1: 'Load', 2: 'Pick', 3: 'Shuffle', 4: 'Manual' } as const;
+// Mode codes used by the PLC program.
+export const MODES = { 0: 'Belum dipilih', 2: 'Load-1', 3: 'Load-N', 4: 'Manual', 5: 'Shuffle', 6: 'Pick-1', 7: 'Pick-N' } as const;
 export type Mode = keyof typeof MODES;
+export const modeName = (m: number) => (MODES as Record<number, string>)[m] ?? `Kode ${m}`;
+export const isLoad = (m: number) => m === 2 || m === 3;
+export const isPick = (m: number) => m === 6 || m === 7;
+export const isRunMode = (m: number) => isLoad(m) || isPick(m) || m === 5;
 
 export const STATUS_START = 50;
 const STATUS_KEYS = [

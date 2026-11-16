@@ -4,7 +4,7 @@ import { Image, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } fr
 export const LOGO_FULL = require('../assets/brand/logo-full.png');
 export const LOGO_MARK = require('../assets/brand/logo-mark.png');
 import { AppConfig, isValidIp } from './config';
-import { MODE_REQ, MODES, Mode, QTY_REQ, SETTING_GROUPS } from './registers';
+import { isLoad, isPick, isRunMode, MODE, modeName, QTY_REQ, SETTING_GROUPS } from './registers';
 import { Btn, C, Card, Cols, Copyright, HoldBtn, Lamp, s, useZoom } from './ui';
 import type { useShuttle } from './useShuttle';
 
@@ -78,28 +78,23 @@ export function StatusCard({ sh }: { sh: Sh }) {
 }
 
 // ---------- Operasi ----------
-type Variant = '1' | 'N';
-
 export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
   const z = useZoom();
   const st = sh.status;
-  const [menu, setMenu] = useState<1 | 2 | null>(null); // which sub-menu (Load/Pick) is open
-  const [variant, setVariant] = useState<Variant | null>(null);
+  const [menu, setMenu] = useState<'load' | 'pick' | null>(null); // open sub-menu
   const [confirm, setConfirm] = useState(false);
   if (!st) return null;
-  const mode = st.activeMode as Mode;
-  const loadPick = mode === 1 || mode === 2;
-  const jobName = loadPick && variant ? `${MODES[mode]}-${variant}` : MODES[mode];
-  const n = variant === 'N' ? 0 : 1; // 0 = jalan terus sampai lajur penuh (Load) / kosong (Pick)
-  const untilText = mode === 1 ? 'sampai lajur penuh' : 'sampai lajur kosong';
-  const ready = !loadPick || variant !== null;
-  const canStart = sh.connected && !!st.idle && !st.emergency && mode >= 1 && mode <= 3 && ready;
+  const mode = st.activeMode;
+  const loadPick = isLoad(mode) || isPick(mode);
+  const label = modeName(mode);
+  const n = mode === 3 || mode === 7 ? 0 : 1; // 0 = jalan terus sampai lajur penuh (Load) / kosong (Pick)
+  const untilText = isLoad(mode) ? 'sampai lajur penuh' : 'sampai lajur kosong';
+  const canStart = sh.connected && !!st.idle && !st.emergency && isRunMode(mode);
   const busy = !sh.connected || !!st.run;
 
-  const choose = (m: Mode, v: Variant | null) => {
-    setVariant(v);
+  const choose = (code: number) => {
     setMenu(null);
-    run(`Pilih ${v ? `${MODES[m]}-${v}` : MODES[m]}`, () => sh.write(MODE_REQ, m));
+    run(`Pilih ${modeName(code)}`, () => sh.write(MODE, code));
   };
   const start = () => {
     setConfirm(false);
@@ -108,48 +103,49 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
       await sh.sendCmd('start');
     });
   };
+  const sub = menu === 'load' ? [2, 3] : menu === 'pick' ? [6, 7] : [];
   return (
     <ScrollView contentContainerStyle={{ padding: 12 }}>
       <Cols>
       <View>
       <Card title="Mode kerja">
         <View style={s.row}>
-          {([1, 2] as const).map((m) => (
-            <View key={m} style={{ flex: 1 }}>
-              <Btn label={MODES[m]} outline={mode !== m && menu !== m} onPress={() => setMenu(menu === m ? null : m)} disabled={busy} />
-            </View>
-          ))}
           <View style={{ flex: 1 }}>
-            <Btn label={MODES[3]} outline={mode !== 3} onPress={() => choose(3, null)} disabled={busy} />
+            <Btn label="Load" outline={!isLoad(mode) && menu !== 'load'} onPress={() => setMenu(menu === 'load' ? null : 'load')} disabled={busy} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Btn label="Pick" outline={!isPick(mode) && menu !== 'pick'} onPress={() => setMenu(menu === 'pick' ? null : 'pick')} disabled={busy} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Btn label="Shuffle" outline={mode !== 5} onPress={() => choose(5)} disabled={busy} />
           </View>
         </View>
-        {menu ? (
+        {sub.length ? (
           <View style={[s.row, { marginTop: 10, padding: 8, backgroundColor: C.bg, borderRadius: 10 }]}>
-            {(['1', 'N'] as const).map((v) => (
-              <View key={v} style={{ flex: 1 }}>
-                <Btn label={`${MODES[menu]}-${v}`} color={C.brand} outline={!(mode === menu && variant === v)} onPress={() => choose(menu, v)} disabled={busy} />
+            {sub.map((code) => (
+              <View key={code} style={{ flex: 1 }}>
+                <Btn label={modeName(code)} color={C.brand} outline={mode !== code} onPress={() => choose(code)} disabled={busy} />
               </View>
             ))}
           </View>
         ) : null}
         <Text style={[s.note, z.note, { marginTop: 8 }]}>
-          {mode === 0 || (loadPick && !variant)
-            ? 'Pilih mode dulu sebelum Start.'
-            : mode === 4
-              ? 'Shuttle sedang di mode Manual. Pilih mode kerja untuk keluar.'
-              : `Mode terpilih: ${jobName}${loadPick ? (n ? ' (1 palet)' : ` (${untilText})`) : ''}`}
+          {mode === 4
+            ? 'Shuttle sedang di mode Manual. Pilih mode kerja untuk keluar.'
+            : !isRunMode(mode)
+              ? 'Pilih mode dulu sebelum Start.'
+              : `Mode terpilih: ${label}${loadPick ? (n ? ' (1 palet)' : ` (${untilText})`) : ''}`}
         </Text>
         {st.emergency || st.alarmCode ? (
           <Text style={[s.note, z.note, { marginTop: 4, color: C.red }]}>Ada alarm aktif. Cek menu Alarm.</Text>
         ) : null}
         {st.run ? (
           <Text style={{ marginTop: 10, fontSize: 16 * z.k, fontWeight: '700', color: C.green }}>
-            Berjalan: {jobName}
+            Berjalan: {label}
             {loadPick && !st.targetQty ? ` — ${st.doneQty} palet selesai` : ''}
           </Text>
         ) : null}
       </Card>
-
       <View style={[s.row, { marginBottom: 12 }]}>
         <View style={{ flex: 1 }}>
           <Btn big label="START" color={C.green} onPress={() => setConfirm(true)} disabled={!canStart} />
@@ -182,7 +178,7 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
           <View style={[s.card, { padding: 20, width: '100%', maxWidth: 520 * z.k, alignSelf: 'center' }]}>
             <Text style={{ fontSize: 20 * z.k, fontWeight: '800', color: C.ink, marginBottom: 8 }}>Mulai shuttle?</Text>
             <Text style={{ fontSize: 16 * z.k, color: C.ink, marginBottom: 16 }}>
-              Mode {jobName}
+              Mode {label}
               {loadPick ? (n ? ', 1 palet' : `, ${untilText}`) : ''}. Pastikan area rak aman.
             </Text>
             <View style={s.row}>
@@ -276,7 +272,7 @@ export function ManualScreen({ sh, run }: { sh: Sh; run: Run }) {
       {!inManual ? (
         <Card>
           <Text style={[s.label, z.label, { marginBottom: 10 }]}>Shuttle belum di mode Manual. Tombol gerak dikunci.</Text>
-          <Btn label="Masuk Mode Manual" color={C.amber} onPress={() => run('Mode manual', () => sh.write(MODE_REQ, 4))} disabled={!sh.connected || !!st.run} />
+          <Btn label="Masuk Mode Manual" color={C.amber} onPress={() => run('Mode manual', () => sh.write(MODE, 4))} disabled={!sh.connected || !!st.run} />
         </Card>
       ) : (
         <Text style={[s.note, z.note, { marginBottom: 8 }]}>Tahan tombol untuk bergerak. Lepas = berhenti.</Text>

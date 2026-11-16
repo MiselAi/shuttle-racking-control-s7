@@ -1,6 +1,6 @@
 // Fake shuttle PLC for trying the app without hardware. Behaves like the PLC logic
 // described in docs/S7_MAP.md (handshake, mode rules, heartbeat watchdog).
-import { CMD, HEARTBEAT, JOG, MODE_REQ, QTY_REQ, READ_COUNT, STATUS_START } from './registers';
+import { CMD, HEARTBEAT, isLoad, isPick, isRunMode, JOG, QTY_REQ, READ_COUNT, STATUS_START } from './registers';
 
 const S = (i: number) => STATUS_START + i;
 const READY = S(0), RUN = S(1), EMG = S(2), IDLE = S(3), STANDBY = S(4), HOME_BACK = S(5), HOME_FRONT = S(6);
@@ -61,7 +61,6 @@ export class SimulatedShuttle {
     // Watchdog: no heartbeat → every jog off.
     if (!linkOk) for (const a of Object.values(JOG)) r[a] = 0;
 
-    if (idle && r[MODE_REQ] !== r[ACTIVE_MODE]) r[ACTIVE_MODE] = r[MODE_REQ];
 
     if (r[CMD.stop]) {
       r[RUN] = 0;
@@ -69,9 +68,9 @@ export class SimulatedShuttle {
     }
     if (r[CMD.start]) {
       const m = r[ACTIVE_MODE];
-      if (idle && !r[EMG] && !r[ALARM] && m >= 1 && m <= 3) {
+      if (idle && !r[EMG] && !r[ALARM] && isRunMode(m)) {
         // Lane already full (Load) or empty (Pick) → alarm instead of running.
-        if ((m === 1 && r[COUNTER] >= LANE_CAP) || (m === 2 && r[COUNTER] === 0)) r[ALARM] = m === 1 ? 1 : 2;
+        if ((isLoad(m) && r[COUNTER] >= LANE_CAP) || (isPick(m) && r[COUNTER] === 0)) r[ALARM] = isLoad(m) ? 1 : 2;
         else {
           r[RUN] = 1;
           r[TARGET] = r[QTY_REQ]; // 0 = until lane full / empty
@@ -98,9 +97,9 @@ export class SimulatedShuttle {
     if (r[RUN] && ++this.jobTicks % 15 === 0) {
       const m = r[ACTIVE_MODE];
       r[DONE]++;
-      r[COUNTER] = Math.min(LANE_CAP, Math.max(0, r[COUNTER] + (m === 2 ? -1 : m === 1 ? 1 : 0)));
-      const laneDone = (m === 1 && r[COUNTER] >= LANE_CAP) || (m === 2 && r[COUNTER] === 0);
-      if ((r[TARGET] && r[DONE] >= r[TARGET]) || laneDone || m === 3) r[RUN] = 0;
+      r[COUNTER] = Math.min(LANE_CAP, Math.max(0, r[COUNTER] + (isPick(m) ? -1 : isLoad(m) ? 1 : 0)));
+      const laneDone = (isLoad(m) && r[COUNTER] >= LANE_CAP) || (isPick(m) && r[COUNTER] === 0);
+      if ((r[TARGET] && r[DONE] >= r[TARGET]) || laneDone || m === 5) r[RUN] = 0;
     }
 
     if (manual && linkOk) {
