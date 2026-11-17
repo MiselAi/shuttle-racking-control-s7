@@ -181,11 +181,22 @@ test('address map over S7: bit commands, moved words, second DB', async () => {
   await c.writeWord(2, 10, 0b1000 << 8); // DB2.DBX10.3 set by the 'PLC' (byte 10 = high byte)
   await c.writeWord(1, 190, 0b10); // byte 190 = 0 (Start off), byte 191 bit 1 = Stop on
   await c.writeWord(1, 2, 85); // High speed auto default DB1.DBW2
-  const r = await io.poll();
+  const { regs: r } = await io.poll();
   assert.equal(r[51], 1); // RUN from DB2.DBX10.3
   assert.equal(r[21], 1); // Stop bit
   assert.equal(r[20], 0); // Start bit cleared
   assert.equal(r[49], 4242);
   assert.equal(r[1], 85);
+  c.close();
+});
+
+test('S7 alarm bits are read per address; invalid ones read 0', async () => {
+  const c = new S7Client(netTransport(), '127.0.0.1', { port: PORT, db: 1 });
+  await c.connect();
+  const io = s7Io(c, defaultMap('s7'), ['DB1.DBX150.0', 'DB1.DBX150.5', 'DB2.DBX30.7', 'DB1.DBW40', 'xx']);
+  await c.writeWord(1, 150, 0b0010_0000 << 8); // byte 150: bit 5 on, bit 0 off
+  await c.writeWord(2, 30, 0x80 << 8); // DB2 byte 30 bit 7 on
+  const { alarms } = await io.poll();
+  assert.deepEqual(alarms, [0, 1, 1, 0, 0]);
   c.close();
 });

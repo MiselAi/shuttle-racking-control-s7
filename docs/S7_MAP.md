@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.7
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.8
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -118,7 +118,7 @@ Pengaman:
 1. APK **hanya mengizinkan ganti mode saat shuttle tidak RUN** (tombol mode dikunci saat RUN).
    PLC tetap **wajib** menolak/mengabaikan perubahan `Reg[65]` saat RUN.
 2. Saat Start (`Reg[20]` = 1): PLC cek mode 2/3/5/6/7, IDLE, tidak emergency, tidak ada alarm → mulai RUN.
-   Jika lajur sudah penuh (Load) / kosong (Pick): jangan RUN, isi kode alarm di `Reg[64]`.
+   Jika lajur sudah penuh (Load) / kosong (Pick): jangan RUN, nyalakan bit alarm yang sesuai (lihat Daftar Alarm).
    Jika syarat tidak terpenuhi: Start diabaikan (tetap tulis balik `0`).
 3. Tombol gerak manual di APK hanya aktif jika `Reg[65]` = 4, tidak RUN, dan tidak EMERGENCY.
 4. Tiap palet selesai: `Reg[67]` +1. Stop kapan saja menghentikan RUN.
@@ -145,7 +145,7 @@ PLC menulis tiap scan. `1` = aktif.
 | 61 | DB1.DBW122 | Lifter DOWN | V21.0 |
 | 62 | DB1.DBW124 | Fungsi buzzer enable (1 = ON) — ditampilkan di tombol Buzzer | V362.0 |
 | 63 | DB1.DBW126 | Counter palet — *tidak ditampilkan APK (v0.3)*, boleh tetap diisi | VW570 |
-| 64 | DB1.DBW128 | Kode alarm aktif (0 = tidak ada) — ditampilkan di layar Alarm **[?] daftar kode** | — |
+| 64 | DB1.DBW128 | *dicadangkan* (dulu Kode alarm — APK sekarang memakai **Daftar Alarm** berbasis bit, lihat §Daftar Alarm) | — |
 | 65 | DB1.DBW130 | **Mode aktif — DITULIS APK** (kode mode, lihat §4) dan dibaca kembali | — |
 | 66 | DB1.DBW132 | N job berjalan (1, atau 0 = sampai penuh/kosong) | — |
 | 67 | DB1.DBW134 | Palet selesai di job berjalan | — |
@@ -176,10 +176,29 @@ Peta Alamat bisa diekspor/diimpor sebagai **CSV** (kolom `id,grup,item,tipe,alam
 
 ---
 
-## 7. Yang masih terbuka [?]
+## 7. Daftar Alarm (satu bit per alarm)
+
+APK menampilkan alarm dari **bit-bit di PLC**. Daftarnya diisi di APK (menu **Peta Alamat → Daftar Alarm**,
+perlu **PIN Admin**), per shuttle, atau diimpor dari **CSV** (kolom `alamat,pesan,solusi`):
+
+| Kolom | Isi | Contoh |
+|---|---|---|
+| alamat | Alamat **BIT** alarm | `DB1.DBX140.0` |
+| pesan | Teks yang muncul di layar Alarm | `Lifter gagal naik (timeout)` |
+| solusi | Cara mengatasi, satu langkah per baris (di Excel: Alt+Enter untuk baris baru) | `Cek sensor Lifter UP` / `Tekan Reset Alarm` |
+
+- Bit = **1** → pesan muncul di layar Alarm. Operator mengetuk pesan untuk melihat **cara mengatasi**.
+- Bit = **0** → pesan hilang. PLC yang menentukan kapan bit alarm mati (misalnya setelah **Reset Alarm** dan penyebabnya hilang).
+- **EMERGENCY** tetap memakai item status sendiri (Peta Alamat) dan otomatis tampil sebagai alarm.
+- Alarm hanya **dibaca** APK; APK tidak pernah menulis bit alarm.
+- Kirim daftar alarm (alamat bit + pesan + cara mengatasi) ke tim APK bila ingin dijadikan isi bawaan.
+
+---
+
+## 8. Yang masih terbuka [?]
 
 1. Definisi mode Shuffle.
-2. Daftar kode alarm → pesan, dan daftar kode pesan status.
+2. Daftar alarm (alamat bit, pesan, cara mengatasi) dan daftar kode pesan status.
 3. Standby: sumber sinyalnya di program baru.
 4. Arti sinyal baterai (1 = OK atau 1 = LOW) — APK menganggap 1 = OK.
 5. Batas min/max setting dan satuan Pick reposition.

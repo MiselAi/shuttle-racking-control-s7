@@ -12,6 +12,7 @@ export type AppConfig = {
   pinMaintenance: string;
   pinAdmin: string; // opens the address map screen
   addrMaps: Record<string, Record<string, string>>; // shuttle index -> item id -> address
+  alarmLists: Record<string, { addr: string; message: string; solution: string }[]>; // shuttle index -> alarms
 };
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -28,6 +29,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   pinMaintenance: '9999',
   pinAdmin: '0000',
   addrMaps: {},
+  alarmLists: {},
 };
 
 const KEY = 'app-config-v1';

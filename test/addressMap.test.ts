@@ -51,3 +51,35 @@ test('planReads merges nearby registers into blocks', () => {
   assert.deepEqual(planReads([0, 130], 200, 120), [[0, 1], [130, 1]]);
 });
 
+import { fromAlarmCsv, toAlarmCsv, validateAlarms } from '../src/addressMap.ts';
+
+test('alarm list: bit-only addresses, duplicates, empty messages', () => {
+  const ok = [{ addr: '140.0', message: 'A', solution: '' }, { addr: '140.1', message: 'B', solution: '' }];
+  assert.deepEqual(validateAlarms('modbus', ok), {});
+  const e = validateAlarms('modbus', [
+    { addr: '140', message: 'word', solution: '' },
+    { addr: '141.2', message: '', solution: '' },
+    { addr: '142.0', message: 'x', solution: '' },
+    { addr: '142.0', message: 'y', solution: '' },
+  ]);
+  assert.match(e[0], /BIT/);
+  assert.match(e[1], /kosong/);
+  assert.match(e[2], /dipakai/);
+  assert.match(e[3], /dipakai/);
+  assert.deepEqual(validateAlarms('s7', [{ addr: 'DB1.DBX140.0', message: 'A', solution: '' }]), {});
+  assert.match(validateAlarms('s7', [{ addr: 'DB1.DBW140', message: 'A', solution: '' }])[0], /BIT/);
+});
+
+test('alarm CSV keeps multi-line solutions, quotes and commas', () => {
+  const list = [
+    { addr: 'DB1.DBX140.0', message: 'Lifter gagal naik, "timeout"', solution: 'Cek sensor.\nCek motor, lalu Reset.' },
+    { addr: 'DB1.DBX140.1', message: 'Baterai lemah', solution: '' },
+  ];
+  const csv = toAlarmCsv('s7', list);
+  assert.deepEqual(fromAlarmCsv('s7', '﻿' + csv), list);
+  // Excel (Indonesian locale) semicolons, with a multi-line quoted cell
+  const semi = 'alamat;pesan;solusi\r\nDB1.DBX9.1;Pintu terbuka;"Tutup pintu.\r\nReset."\r\n';
+  assert.deepEqual(fromAlarmCsv('s7', semi), [{ addr: 'DB1.DBX9.1', message: 'Pintu terbuka', solution: 'Tutup pintu.\nReset.' }]);
+  assert.throws(() => fromAlarmCsv('modbus', csv), /untuk S7/);
+});
+

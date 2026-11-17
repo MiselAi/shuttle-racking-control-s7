@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 export const LOGO_FULL = require('../assets/brand/logo-full.png');
 export const LOGO_MARK = require('../assets/brand/logo-mark.png');
+import type { AlarmDef } from './addressMap';
 import { AppConfig, isValidIp } from './config';
 import { isLoad, isPick, isRunMode, MODE, modeName, QTY_REQ, SETTING_GROUPS } from './registers';
 import { Btn, C, Card, Cols, Copyright, HoldBtn, Lamp, s, useZoom } from './ui';
@@ -136,7 +137,7 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
               ? 'Pilih mode dulu sebelum Start.'
               : `Mode terpilih: ${label}${loadPick ? (n ? ' (1 palet)' : ` (${untilText})`) : ''}`}
         </Text>
-        {st.emergency || st.alarmCode ? (
+        {sh.alarms.length ? (
           <Text style={[s.note, z.note, { marginTop: 4, color: C.red }]}>Ada alarm aktif. Cek menu Alarm.</Text>
         ) : null}
         {st.run ? (
@@ -197,48 +198,38 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
 }
 
 // ---------- Alarm ----------
-export type ActiveAlarm = { key: string; text: string; since: Date };
-
-// Active alarms with the time each was first seen (reset when switching shuttle).
-export function useActiveAlarms(st: Sh['status']): ActiveAlarm[] {
-  const seen = useRef(new Map<string, Date>());
-  const now: { key: string; text: string }[] = [];
-  if (st?.emergency) now.push({ key: 'emg', text: 'EMERGENCY ditekan' });
-  if (st?.alarmCode) now.push({ key: `a${st.alarmCode}`, text: `Alarm kode ${st.alarmCode}` });
-  // shortcut: shows the raw code only, until the PLC alarm list (code → message) is known.
-  const keys = new Set(now.map((a) => a.key));
-  for (const k of [...seen.current.keys()]) if (!keys.has(k)) seen.current.delete(k);
-  return now.map((a) => {
-    if (!seen.current.has(a.key)) seen.current.set(a.key, new Date());
-    return { ...a, since: seen.current.get(a.key)! };
-  });
-}
-
-const fmtTime = (d: Date) => d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-export function AlarmScreen({ sh, run, alarms }: { sh: Sh; run: Run; alarms: ActiveAlarm[] }) {
+// Only the messages of active alarms; tapping one opens how to solve it.
+export function AlarmScreen({ sh, run }: { sh: Sh; run: Run }) {
   const z = useZoom();
+  const [open, setOpen] = useState<AlarmDef | null>(null);
   const st = sh.status;
   if (!st) return null;
+  const reset = () => run('Reset alarm', () => sh.sendCmd('resetAlarm'));
   return (
     <ScrollView contentContainerStyle={{ padding: 12 }}>
       <Cols>
       <Card title="Alarm aktif">
-        {alarms.length === 0 ? (
+        {sh.alarms.length === 0 ? (
           <Text style={[s.label, z.label, { color: C.green, fontWeight: '700' }]}>Tidak ada alarm.</Text>
         ) : (
-          alarms.map((a) => (
-            <View key={a.key} style={{ flexDirection: 'row', backgroundColor: C.red, borderRadius: 8, padding: 10, marginBottom: 8 }}>
-              <Text style={{ color: '#fff', fontWeight: '800', flex: 1, fontSize: 15 * z.k }}>{a.text}</Text>
-              <Text style={{ color: '#fff', fontSize: 14 * z.k }}>sejak {fmtTime(a.since)}</Text>
-            </View>
+          sh.alarms.map((a) => (
+            <Pressable
+              key={a.addr}
+              onPress={() => setOpen(a)}
+              accessibilityRole="button"
+              accessibilityHint="Lihat cara mengatasi"
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', backgroundColor: C.red, borderRadius: 8, padding: 12 * z.k, marginBottom: 8, opacity: pressed ? 0.8 : 1 })}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', flex: 1, fontSize: 16 * z.k }}>{a.message}</Text>
+              <Text style={{ color: '#FFE3DF', fontSize: 13 * z.k }}>Cara mengatasi ›</Text>
+            </Pressable>
           ))
         )}
       </Card>
       <View>
       <View style={s.row}>
         <View style={{ flex: 1 }}>
-          <Btn label="Reset Alarm" color={C.amber} onPress={() => run('Reset alarm', () => sh.sendCmd('resetAlarm'))} disabled={!sh.connected} />
+          <Btn label="Reset Alarm" color={C.amber} onPress={reset} disabled={!sh.connected} />
         </View>
         <View style={{ flex: 1 }}>
           <Btn
@@ -250,9 +241,43 @@ export function AlarmScreen({ sh, run, alarms }: { sh: Sh; run: Run; alarms: Act
           />
         </View>
       </View>
-      <Text style={[s.note, z.note, { marginTop: 10 }]}>EMERGENCY hanya bisa dilepas dari tombol fisik di shuttle, lalu tekan Reset Alarm.</Text>
+      <Text style={[s.note, z.note, { marginTop: 10 }]}>Ketuk pesan alarm untuk melihat cara mengatasinya.</Text>
       </View>
       </Cols>
+
+      <Modal transparent visible={!!open} animationType="fade" onRequestClose={() => setOpen(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}>
+          <View style={[s.card, { padding: 0, width: '100%', maxWidth: 640 * z.k, maxHeight: '90%', alignSelf: 'center', overflow: 'hidden' }]}>
+            <View style={{ backgroundColor: C.red, padding: 16 * z.k }}>
+              <Text style={{ color: '#FFE3DF', fontSize: 13 * z.k, fontWeight: '700' }}>ALARM</Text>
+              <Text style={{ color: '#fff', fontSize: 22 * z.k, fontWeight: '800' }}>{open?.message}</Text>
+            </View>
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 18 * z.k }}>
+              <Text style={{ fontSize: 15 * z.k, fontWeight: '800', color: C.navy, marginBottom: 8 }}>Cara mengatasi</Text>
+              {(open?.solution ?? '').split('\n').map((x) => x.trim()).filter(Boolean).length === 0 ? (
+                <Text style={[s.note, z.note]}>Belum ada cara mengatasi untuk alarm ini. Isi di Peta Alamat → Daftar Alarm.</Text>
+              ) : (
+                (open?.solution ?? '').split('\n').map((x) => x.trim()).filter(Boolean).map((step, i) => (
+                  <View key={i} style={{ flexDirection: 'row', marginBottom: 8 }}>
+                    <View style={{ width: 26 * z.k, height: 26 * z.k, borderRadius: 13 * z.k, backgroundColor: C.yellow, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                      <Text style={{ fontWeight: '800', color: C.navy, fontSize: 13 * z.k }}>{i + 1}</Text>
+                    </View>
+                    <Text style={{ flex: 1, fontSize: 16 * z.k, color: C.ink, lineHeight: 22 * z.k }}>{step}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <View style={[s.row, { padding: 18 * z.k, paddingTop: 0 }]}>
+              <View style={{ flex: 1 }}>
+                <Btn label="Tutup" outline onPress={() => setOpen(null)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Btn label="Reset Alarm" color={C.amber} disabled={!sh.connected} onPress={() => (reset(), setOpen(null))} />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }

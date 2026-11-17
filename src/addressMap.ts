@@ -45,7 +45,6 @@ export const ITEMS: Item[] = [
   { id: 'st.lifterDown', group: G.st, label: 'Lifter DOWN', kind: 'flag', reg: 61 },
   { id: 'st.buzzerEnabled', group: G.st, label: 'Buzzer enable', kind: 'flag', reg: 62 },
   { id: 'st.palletCounter', group: G.st, label: 'Counter palet', kind: 'value', reg: 63 },
-  { id: 'st.alarmCode', group: G.st, label: 'Kode alarm', kind: 'value', reg: 64 },
   { id: 'st.targetQty', group: G.st, label: 'N job berjalan', kind: 'value', reg: 66 },
   { id: 'st.doneQty', group: G.st, label: 'Palet selesai', kind: 'value', reg: 67 },
   { id: 'st.messageCode', group: G.st, label: 'Kode pesan status', kind: 'value', reg: 68 },
@@ -135,9 +134,50 @@ export function effectiveMap(p: Protocol, stored: AddrMap | undefined, db = 1): 
 
 // ---- CSV export / import (opens in Excel) ----
 const CSV_HEADER = 'id,grup,item,tipe,alamat';
+const q = (v: string) => (/[",;\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+// RFC 4180-ish: quoted cells may contain separators, quotes ("") and line breaks.
+// Separator auto-detected from the first data line (Excel with Indonesian locale saves ";").
+export function parseCsv(text: string): { protocol: string | null; rows: string[][] } {
+  const t = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const lines = t.split('\n');
+  const proto = lines.find((l) => l.startsWith('# protokol='))?.split('=')[1]?.trim() ?? null;
+  const body = lines.filter((l) => !l.startsWith('#')).join('\n');
+  const first = body.split('\n').find((l) => l.trim()) ?? '';
+  const sep = first.includes(';') && !first.includes(',') ? ';' : ',';
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (inQ) {
+      if (c === '"' && body[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (c === '"') inQ = false;
+      else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === sep) {
+      row.push(cur);
+      cur = '';
+    } else if (c === '\n') {
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = '';
+    } else cur += c;
+  }
+  row.push(cur);
+  rows.push(row);
+  return { protocol: proto, rows: rows.filter((r) => r.some((c) => c.trim())).map((r) => r.map((c) => c.trim())) };
+}
+
+function checkProtocol(p: Protocol, proto: string | null) {
+  if (proto && proto !== p) throw new Error(`File ini untuk ${proto.toUpperCase()}, bukan ${p.toUpperCase()}`);
+}
 
 export function toCsv(p: Protocol, map: AddrMap): string {
-  const q = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   const rows = ITEMS.map((it) => {
     const a = parse(p, map[it.id] ?? '');
     return [it.id, it.group, it.label, a?.bit != null ? 'BIT' : 'WORD', (map[it.id] ?? '').toUpperCase()].map(q).join(',');
@@ -147,38 +187,56 @@ export function toCsv(p: Protocol, map: AddrMap): string {
 
 // Returns the addresses found in the file (by id) or throws a readable error.
 export function fromCsv(p: Protocol, text: string): AddrMap {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
-  const proto = lines.find((l) => l.startsWith('# protokol='))?.split('=')[1]?.trim();
-  if (proto && proto !== p) throw new Error(`File ini untuk ${proto.toUpperCase()}, bukan ${p.toUpperCase()}`);
-  const body = lines.filter((l) => !l.startsWith('#'));
-  const sep = body[0]?.includes(';') && !body[0].includes(',') ? ';' : ','; // Excel with Indonesian locale saves ";"
-  const cols = (l: string) => {
-    const out: string[] = [];
-    let cur = '';
-    let inQ = false;
-    for (let i = 0; i < l.length; i++) {
-      const c = l[i];
-      if (inQ) {
-        if (c === '"' && l[i + 1] === '"') (cur += '"'), i++;
-        else if (c === '"') inQ = false;
-        else cur += c;
-      } else if (c === '"') inQ = true;
-      else if (c === sep) out.push(cur), (cur = '');
-      else cur += c;
-    }
-    out.push(cur);
-    return out.map((s) => s.trim());
-  };
-  const head = cols(body[0] ?? '').map((h) => h.toLowerCase());
+  const { protocol, rows } = parseCsv(text);
+  checkProtocol(p, protocol);
+  const head = (rows[0] ?? []).map((h) => h.toLowerCase());
   const iId = head.indexOf('id');
   const iAddr = head.indexOf('alamat');
   if (iId < 0 || iAddr < 0) throw new Error('Kolom "id" dan "alamat" tidak ditemukan');
   const known = new Set(ITEMS.map((it) => it.id));
   const map: AddrMap = {};
-  for (const l of body.slice(1)) {
-    const c = cols(l);
-    if (known.has(c[iId]) && c[iAddr]) map[c[iId]] = c[iAddr].toUpperCase();
-  }
+  for (const c of rows.slice(1)) if (known.has(c[iId]) && c[iAddr]) map[c[iId]] = c[iAddr].toUpperCase();
   if (!Object.keys(map).length) throw new Error('Tidak ada alamat yang dikenali di file ini');
   return map;
+}
+
+// ---- Alarm list: one bit per alarm, message + how to solve it ----
+export type AlarmDef = { addr: string; message: string; solution: string };
+
+// Errors per row index: not a bit address, duplicate address, or empty message.
+export function validateAlarms(p: Protocol, list: AlarmDef[]): Record<number, string> {
+  const err: Record<number, string> = {};
+  const seen = new Map<string, number>();
+  list.forEach((r, i) => {
+    const a = parse(p, r.addr);
+    if (!a || a.bit === null) err[i] = `Alamat harus BIT (${p === 's7' ? 'DB1.DBX140.0' : '140.0'})`;
+    else if (!r.message.trim()) err[i] = 'Pesan alarm kosong';
+    const key = r.addr.trim().toUpperCase();
+    if (seen.has(key) && !err[i]) {
+      err[i] = 'Alamat dipakai alarm lain';
+      err[seen.get(key)!] ??= 'Alamat dipakai alarm lain';
+    } else seen.set(key, i);
+  });
+  return err;
+}
+
+export function toAlarmCsv(p: Protocol, list: AlarmDef[]): string {
+  const rows = list.map((r) => [r.addr.toUpperCase(), r.message, r.solution].map(q).join(','));
+  return [`# protokol=${p}`, 'alamat,pesan,solusi', ...rows].join('\r\n') + '\r\n';
+}
+
+export function fromAlarmCsv(p: Protocol, text: string): AlarmDef[] {
+  const { protocol, rows } = parseCsv(text);
+  checkProtocol(p, protocol);
+  const head = (rows[0] ?? []).map((h) => h.toLowerCase());
+  const iA = head.indexOf('alamat');
+  const iM = head.indexOf('pesan');
+  const iS = head.indexOf('solusi');
+  if (iA < 0 || iM < 0) throw new Error('Kolom "alamat" dan "pesan" tidak ditemukan');
+  const list = rows
+    .slice(1)
+    .map((c) => ({ addr: (c[iA] ?? '').toUpperCase(), message: c[iM] ?? '', solution: iS >= 0 ? c[iS] ?? '' : '' }))
+    .filter((r) => r.addr || r.message);
+  if (!list.length) throw new Error('Tidak ada alarm di file ini');
+  return list;
 }

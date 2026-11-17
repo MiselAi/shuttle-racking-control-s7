@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { type AddrMap, defaultMap, effectiveMap, FORMAT_HINT, fromCsv, GROUPS, ITEMS, parse, type Protocol, toCsv, validate, withType } from './addressMap';
+import { type AddrMap, type AlarmDef, defaultMap, effectiveMap, FORMAT_HINT, fromAlarmCsv, fromCsv, GROUPS, ITEMS, parse, type Protocol, toAlarmCsv, toCsv, validate, validateAlarms, withType } from './addressMap';
 import type { AppConfig } from './config';
 import { Btn, C, Card, s, useZoom } from './ui';
 
@@ -10,6 +10,7 @@ type Props = {
   onSave: (c: AppConfig) => Promise<void>;
   current: number; // shuttle shown in the top bar (live values are read from it)
   regs: number[] | null; // live values of the current shuttle, by default register
+  alarmState: Record<string, number>; // live alarm bits of the current shuttle, by address
   run: (label: string, fn: () => Promise<unknown>) => void;
   db?: number; // S7 default DB
 };
@@ -17,8 +18,47 @@ type Props = {
 export function AddressMapScreen(props: Props) {
   // Locked again every time the screen is left (state resets on unmount).
   const [unlocked, setUnlocked] = useState(false);
-  return unlocked ? <MapEditor {...props} /> : <AdminGate pin={props.cfg.pinAdmin} onOk={() => setUnlocked(true)} />;
+  return unlocked ? <AdminArea {...props} /> : <AdminGate pin={props.cfg.pinAdmin} onOk={() => setUnlocked(true)} />;
 }
+
+function AdminArea(props: Props) {
+  const z = useZoom();
+  const [view, setView] = useState<'alamat' | 'alarm'>('alamat');
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10 * z.k, paddingBottom: 6 * z.k }}>
+        {([['alamat', 'Alamat Item'], ['alarm', 'Daftar Alarm']] as const).map(([k, l]) => (
+          <View key={k} style={{ width: 180 * z.k }}>
+            <Btn label={l} color={C.navy} outline={view !== k} onPress={() => setView(k)} />
+          </View>
+        ))}
+      </View>
+      {view === 'alamat' ? <MapEditor {...props} /> : <AlarmEditor {...props} />}
+    </View>
+  );
+}
+
+// Share a text file through Android's share sheet (save to Files/Drive, WhatsApp, email).
+async function shareText(fileName: string, content: string) {
+  if (Platform.OS === 'web') throw new Error('Ekspor hanya tersedia di tablet');
+  const { File, Paths } = require('expo-file-system');
+  const Sharing = require('expo-sharing');
+  const f = new File(Paths.cache, fileName);
+  if (f.exists) f.delete();
+  f.create();
+  await f.write('\uFEFF' + content); // BOM so Excel reads UTF-8
+  await Sharing.shareAsync(f.uri, { mimeType: 'text/csv', dialogTitle: fileName, UTI: 'public.comma-separated-values-text' });
+}
+
+// Pick a text file; null when cancelled.
+async function pickText(): Promise<string | null> {
+  if (Platform.OS === 'web') throw new Error('Impor hanya tersedia di tablet');
+  const { File } = require('expo-file-system');
+  const res = await File.pickFileAsync({ mimeTypes: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/vnd.ms-excel', '*/*'] });
+  return res.canceled ? null : await res.result.text();
+}
+
+const stamp = (cfg: AppConfig, i: number) => `${(cfg.shuttles[i]?.name ?? `Shuttle-${i + 1}`).replace(/\s+/g, '-')}_${new Date().toISOString().slice(0, 10)}`;
 
 function AdminGate({ pin, onOk }: { pin: string; onOk: () => void }) {
   const z = useZoom();
@@ -77,23 +117,11 @@ function MapEditor({ protocol, cfg, onSave, current, regs, run, db = 1 }: Props)
     run('Simpan peta alamat', () => onSave({ ...cfg, addrMaps: { ...cfg.addrMaps, [String(target)]: clean } }));
   };
 
-  const fileName = `peta-alamat_${protocol.toUpperCase()}_${(cfg.shuttles[target]?.name ?? `Shuttle-${target + 1}`).replace(/\s+/g, '-')}_${new Date().toISOString().slice(0, 10)}.csv`;
-  const exportCsv = async () => {
-    if (Platform.OS === 'web') throw new Error('Ekspor hanya tersedia di tablet');
-    const { File, Paths } = require('expo-file-system');
-    const Sharing = require('expo-sharing');
-    const f = new File(Paths.cache, fileName);
-    if (f.exists) f.delete();
-    f.create();
-    await f.write('\uFEFF' + toCsv(protocol, draft)); // BOM so Excel reads UTF-8
-    await Sharing.shareAsync(f.uri, { mimeType: 'text/csv', dialogTitle: fileName, UTI: 'public.comma-separated-values-text' });
-  };
+  const exportCsv = () => shareText(`peta-alamat_${protocol.toUpperCase()}_${stamp(cfg, target)}.csv`, toCsv(protocol, draft));
   const importCsv = async () => {
-    if (Platform.OS === 'web') throw new Error('Impor hanya tersedia di tablet');
-    const { File } = require('expo-file-system');
-    const res = await File.pickFileAsync({ mimeTypes: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/vnd.ms-excel', '*/*'] });
-    if (res.canceled) return;
-    const found = fromCsv(protocol, await res.result.text());
+    const text = await pickText();
+    if (text === null) return;
+    const found = fromCsv(protocol, text);
     setDraft((d) => ({ ...d, ...found }));
     setNote(`${Object.keys(found).length} alamat dimuat dari file. Periksa, lalu Tinjau & Simpan.`);
   };
@@ -242,6 +270,142 @@ function MapEditor({ protocol, cfg, onSave, current, regs, run, db = 1 }: Props)
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+// ---- Daftar Alarm: one bit per alarm, message and how to solve it ----
+function AlarmEditor({ protocol, cfg, onSave, current, alarmState, run }: Props) {
+  const z = useZoom();
+  const [target, setTarget] = useState(current);
+  const saved: AlarmDef[] = cfg.alarmLists[String(target)] ?? [];
+  const [rows, setRows] = useState<AlarmDef[]>(saved);
+  const [openSol, setOpenSol] = useState<number | null>(null);
+  const [note, setNote] = useState('');
+  useEffect(() => setRows(cfg.alarmLists[String(target)] ?? []), [cfg, target]);
+
+  const errors = validateAlarms(protocol, rows);
+  const nErr = Object.keys(errors).length;
+  const changed = JSON.stringify(rows) !== JSON.stringify(saved);
+  const savedAddrs = new Set(saved.map((r) => r.addr.trim().toUpperCase()));
+  const live = (addr: string) => {
+    const k = addr.trim().toUpperCase();
+    return target === current && savedAddrs.has(k) ? alarmState[k] : undefined;
+  };
+  const set = (i: number, patch: Partial<AlarmDef>) => setRows((x) => x.map((y, j) => (j === i ? { ...y, ...patch } : y)));
+  const save = () => {
+    const clean = rows.map((r) => ({ addr: r.addr.trim().toUpperCase(), message: r.message.trim(), solution: r.solution.trim() }));
+    run('Simpan daftar alarm', () => onSave({ ...cfg, alarmLists: { ...cfg.alarmLists, [String(target)]: clean } }));
+  };
+  const importCsv = async () => {
+    const text = await pickText();
+    if (text === null) return;
+    const list = fromAlarmCsv(protocol, text);
+    setRows(list);
+    setNote(`${list.length} alarm dimuat dari file. Periksa, lalu Simpan.`);
+  };
+  const example = protocol === 's7' ? 'DB1.DBX140.0' : '140.0';
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ backgroundColor: '#FFF4D1', borderBottomWidth: 1, borderTopWidth: 1, borderColor: C.yellow, paddingHorizontal: 12, paddingVertical: 8 * z.k }}>
+        <Text style={{ fontSize: 14 * z.k, color: C.ink }}>
+          Satu alarm = satu <Text style={{ fontWeight: '800' }}>BIT</Text> ({example}). Bit = 1 → pesan muncul di layar Alarm; ketuk pesan untuk melihat cara mengatasi.
+          {cfg.simulate ? '  ·  Mode simulasi memakai 2 alarm contoh; daftar ini dipakai saat tersambung ke PLC.' : ''}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 10 * z.k }}>
+        <Text style={[s.label, z.label, { marginBottom: 0 }]}>Berlaku untuk:</Text>
+        {cfg.shuttles.map((x, i) => (
+          <View key={i} style={{ width: 130 * z.k }}>
+            <Btn label={x.name} color={i === target ? C.navy : C.brand} outline={i !== target} onPress={() => setTarget(i)} />
+          </View>
+        ))}
+        <View style={{ flex: 1 }} />
+        <View style={{ width: 110 * z.k }}>
+          <Btn label="Ekspor" outline onPress={() => run('Ekspor CSV', () => shareText(`daftar-alarm_${protocol.toUpperCase()}_${stamp(cfg, target)}.csv`, toAlarmCsv(protocol, rows)))} />
+        </View>
+        <View style={{ width: 110 * z.k }}>
+          <Btn label="Impor" outline onPress={() => run('Impor CSV', importCsv)} />
+        </View>
+      </View>
+      {note ? <Text style={[s.note, z.note, { paddingHorizontal: 12, paddingTop: 6, color: C.brand }]}>{note}</Text> : null}
+
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 90 * z.k }} keyboardShouldPersistTaps="handled">
+        <Card title={`Daftar alarm (${rows.length})`}>
+          {rows.length === 0 ? <Text style={[s.note, z.note, { marginBottom: 8 }]}>Belum ada alarm. Tekan "+ Tambah alarm" atau Impor CSV (kolom: alamat, pesan, solusi).</Text> : null}
+          {rows.length ? (
+            <View style={{ flexDirection: 'row', paddingBottom: 4, borderBottomWidth: 1, borderColor: C.line, marginBottom: 4, gap: 8 }}>
+              <Text style={[s.note, z.note, { width: 52 * z.k }]}>Aktif</Text>
+              <Text style={[s.note, z.note, { width: 150 * z.k }]}>Alamat bit</Text>
+              <Text style={[s.note, z.note, { flex: 1 }]}>Pesan</Text>
+            </View>
+          ) : null}
+          {rows.map((r, i) => {
+            const st = live(r.addr);
+            return (
+              <View key={i} style={{ borderBottomWidth: 1, borderColor: C.line, paddingVertical: 6 * z.k, paddingHorizontal: 4, backgroundColor: errors[i] ? '#FDECEA' : openSol === i ? '#FFF7DB' : undefined, borderRadius: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ width: 52 * z.k, alignItems: 'center' }}>
+                    <View style={{ width: 16 * z.k, height: 16 * z.k, borderRadius: 8 * z.k, backgroundColor: st === 1 ? C.red : st === 0 ? C.off : 'transparent', borderWidth: st === undefined ? 1 : 0, borderColor: C.line }} />
+                  </View>
+                  <TextInput
+                    style={[s.input, z.input, { width: 150 * z.k, fontFamily: 'monospace', fontSize: 14 * z.k, paddingVertical: 4 * z.k }, errors[i] ? { borderColor: C.red } : null]}
+                    value={r.addr}
+                    placeholder={example}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    onChangeText={(v) => set(i, { addr: v })}
+                    accessibilityLabel={`Alamat alarm ${i + 1}`}
+                  />
+                  <TextInput
+                    style={[s.input, z.input, { flex: 1, paddingVertical: 4 * z.k, fontSize: 15 * z.k }]}
+                    value={r.message}
+                    placeholder="Pesan alarm"
+                    onChangeText={(v) => set(i, { message: v })}
+                    accessibilityLabel={`Pesan alarm ${i + 1}`}
+                  />
+                  <View style={{ width: 96 * z.k }}>
+                    <Btn label={openSol === i ? 'Tutup' : 'Solusi'} outline onPress={() => setOpenSol(openSol === i ? null : i)} />
+                  </View>
+                  <View style={{ width: 60 * z.k }}>
+                    <Btn label="✕" color={C.red} outline onPress={() => (setRows((x) => x.filter((_, j) => j !== i)), setOpenSol(null))} />
+                  </View>
+                </View>
+                {errors[i] ? <Text style={{ color: C.red, fontSize: 12 * z.k, marginLeft: 60 * z.k, marginTop: 2 }}>⚠ {errors[i]}</Text> : null}
+                {openSol === i ? (
+                  <View style={{ marginTop: 8, marginLeft: 60 * z.k }}>
+                    <Text style={[s.label, z.label]}>Cara mengatasi (satu langkah per baris)</Text>
+                    <TextInput
+                      style={[s.input, z.input, { minHeight: 110 * z.k, textAlignVertical: 'top', fontSize: 15 * z.k }]}
+                      value={r.solution}
+                      multiline
+                      onChangeText={(v) => set(i, { solution: v })}
+                      accessibilityLabel={`Cara mengatasi alarm ${i + 1}`}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+          <View style={{ marginTop: 10, width: 220 * z.k }}>
+            <Btn label="+ Tambah alarm" outline onPress={() => (setRows((x) => [...x, { addr: '', message: '', solution: '' }]), setOpenSol(rows.length))} />
+          </View>
+        </Card>
+      </ScrollView>
+
+      <View style={{ position: 'absolute', left: 12, right: 12, bottom: 10, backgroundColor: C.navy, borderRadius: 12, padding: 10 * z.k, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={{ color: '#fff', fontSize: 15 * z.k, flex: 1 }}>
+          {changed ? <Text style={{ fontWeight: '800', color: C.yellow }}>Daftar alarm berubah</Text> : 'Tidak ada perubahan'}
+          {nErr ? <Text style={{ color: '#FFB0A6' }}>{`  ·  ${nErr} baris bermasalah`}</Text> : null}
+        </Text>
+        <View style={{ width: 140 * z.k }}>
+          <Btn label="Batal" color="#2B4A86" onPress={() => (setRows(saved), setNote(''))} disabled={!changed} />
+        </View>
+        <View style={{ width: 200 * z.k }}>
+          <Btn label="Simpan" color={C.yellow} textColor={C.navy} disabled={!changed || nErr > 0} onPress={save} />
+        </View>
+      </View>
     </View>
   );
 }

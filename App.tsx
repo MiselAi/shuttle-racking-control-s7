@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppConfig, loadConfig, saveConfig } from './src/config';
-import { AlarmScreen, LOGO_MARK, LoginScreen, ManualScreen, OperasiScreen, PengaturanScreen, SettingPlcScreen, useActiveAlarms } from './src/screens';
+import { AlarmScreen, LOGO_MARK, LoginScreen, ManualScreen, OperasiScreen, PengaturanScreen, SettingPlcScreen } from './src/screens';
 import { Btn, C, Copyright, s, useScale } from './src/ui';
 import { useShuttle } from './src/useShuttle';
 import { AddressMapScreen } from './src/AddressMapScreen';
@@ -50,7 +50,7 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
   const [tab, setTab] = useState<Tab>('operasi');
   const [flash, setFlash] = useState<{ text: string; bad: boolean } | null>(null);
   const sh = useShuttle(cfg, idx);
-  const alarms = useActiveAlarms(sh.status);
+  const alarms = sh.alarms;
   const k = useScale();
 
   useEffect(() => {
@@ -126,13 +126,13 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
 
         <View style={{ flex: 1 }}>
           {tab === 'peta' ? (
-            <AddressMapScreen protocol="s7" cfg={cfg} onSave={onSave} current={idx} regs={sh.regs} run={run} db={cfg.db} />
+            <AddressMapScreen protocol="s7" cfg={cfg} onSave={onSave} current={idx} regs={sh.regs} alarmState={sh.alarmState} run={run} db={cfg.db} />
           ) : tab === 'app' ? (
             <PengaturanScreen cfg={cfg} onSave={onSave} />
           ) : !sh.status ? (
             <Text style={[s.note, { padding: 24, textAlign: 'center' }]}>Menunggu data dari shuttle…</Text>
           ) : tab === 'alarm' ? (
-            <AlarmScreen sh={sh} run={run} alarms={alarms} />
+            <AlarmScreen sh={sh} run={run} />
           ) : tab === 'operasi' ? (
             <OperasiScreen key={idx} sh={sh} run={run} />
           ) : tab === 'manual' ? (
