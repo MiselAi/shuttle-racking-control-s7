@@ -12,7 +12,7 @@ Bisa dipasang berdampingan dengan versi Modbus (nama paket berbeda: `com.shuttle
 - Alarm: hanya pesan dari alarm aktif (bit DBX per alarm); ketuk pesan untuk melihat cara mengatasi. Daftar alarm (alamat bit, pesan, solusi) diisi di Peta Alamat → Daftar Alarm atau impor CSV.
 - Tema warna MiNDX (navy, biru, kuning) dan footer copyright PT. Mitrainti Sejahtera Eletrindo (logo MISEL).
 - Tampilan landscape: menu di samping kiri, isi layar dua kolom. Tombol, teks dan lampu status membesar otomatis di tablet (skala 1× di HP sampai 1,6× di tablet besar).
-- Manual: tombol tahan Maju / Mundur / Lifter UP / DOWN, Back to Home.
+- Manual: tombol tahan Maju / Mundur / Lifter UP / DOWN, pilih orientasi Home (Home Back / Home Front), Back to Home.
 - Setting PLC: setting dikelompokkan (Speed Auto, Speed Manual, Posisi), disimpan per grup, dengan batas min/max.
 - Peta Alamat (PIN Admin): alamat tiap item bisa diubah per shuttle, tipe WORD (DBW) atau BIT (DBX), validasi bentrok, nilai live, ekspor/impor CSV.
 - Pengaturan: IP tiap shuttle, port (102), nomor DB, rack/slot, PIN, dan **mode simulasi** (coba tanpa PLC).

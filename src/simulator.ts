@@ -3,7 +3,7 @@
 import { CMD, HEARTBEAT, isLoad, isPick, isRunMode, JOG, QTY_REQ, READ_COUNT, STATUS_START } from './registers';
 
 const S = (i: number) => STATUS_START + i;
-const READY = S(0), RUN = S(1), EMG = S(2), IDLE = S(3), STANDBY = S(4), HOME_BACK = S(5), HOME_FRONT = S(6);
+const READY = S(0), RUN = S(1), EMG = S(2), IDLE = S(3), STANDBY = S(4);
 const BW_LIMIT = S(7), FW_LIMIT = S(8), BATTERY = S(9), P_UP = S(10), P_DOWN = S(11), BUZZER = S(12);
 const COUNTER = S(13), ALARM = S(14), ACTIVE_MODE = S(15), TARGET = S(16), DONE = S(17);
 const LANE_CAP = 6; // pallets per lane in the simulation
@@ -20,7 +20,7 @@ export class SimulatedShuttle {
 
   constructor() {
     [40, 80, 30, 20, 50, 30, 1200, 0, 1200, 50].forEach((v, i) => (this.r[i] = v));
-    for (const k of [READY, IDLE, HOME_BACK, BW_LIMIT, BATTERY, P_DOWN]) this.r[k] = 1;
+    for (const k of [READY, IDLE, CMD.homeBack, BW_LIMIT, BATTERY, P_DOWN]) this.r[k] = 1;
     this.r[COUNTER] = 3;
   }
 
@@ -90,7 +90,7 @@ export class SimulatedShuttle {
     }
     const manual = idle && r[ACTIVE_MODE] === 4;
     if (r[CMD.backToHome]) {
-      if (manual) this.pos = 0;
+      if (manual) this.pos = r[CMD.homeFront] ? 100 : 0; // goes to the home chosen by the app
       r[CMD.backToHome] = 0;
     }
 
@@ -112,8 +112,6 @@ export class SimulatedShuttle {
     }
     r[BW_LIMIT] = this.pos === 0 ? 1 : 0;
     r[FW_LIMIT] = this.pos === 100 ? 1 : 0;
-    r[HOME_BACK] = r[BW_LIMIT];
-    r[HOME_FRONT] = r[FW_LIMIT];
     r[IDLE] = r[RUN] ? 0 : 1;
     r[STANDBY] = r[IDLE] && r[ACTIVE_MODE] !== 0 ? 1 : 0;
   }

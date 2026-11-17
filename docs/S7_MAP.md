@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.8
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.9
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -73,8 +73,8 @@ min/max sendiri**; APK juga membatasi.
 | 22 | DB1.DBW44 | Reset alarm | handshake | Operator | V379.0 |
 | 23 | DB1.DBW46 | Buzzer enable/disable (toggle fungsi buzzer) | handshake | Operator | V362.0 |
 | 24 | DB1.DBW48 | Back to Home (shuttle kembali ke posisi Home) | handshake | Maintenance | V381.0 |
-| 25 | DB1.DBW50 | *dicadangkan* (dulu Set flag Home Back — tidak dipakai APK) | — | — | V765.0 |
-| 26 | DB1.DBW52 | *dicadangkan* (dulu Set flag Home Front — tidak dipakai APK) | — | — | V766.0 |
+| 25 | DB1.DBW50 | **Home Back** — pilih orientasi Home Back, sekaligus status lampu Home Back (lihat §3b) | **pilihan** | Maintenance | V765.0 |
+| 26 | DB1.DBW52 | **Home Front** — pilih orientasi Home Front, sekaligus status lampu Home Front (lihat §3b) | **pilihan** | Maintenance | V766.0 |
 | 30 | DB1.DBW60 | Jog Lifter UP | **tahan** | Maintenance | V348.0 |
 | 31 | DB1.DBW62 | Jog Lifter DOWN | **tahan** | Maintenance | V349.0 |
 | 32 | DB1.DBW64 | Jog MAJU (forward) | **tahan** | Maintenance | V347.0 |
@@ -93,6 +93,17 @@ WiFi bisa putus saat tombol jog sedang ditahan. PLC wajib:
 
 APK juga menghentikan heartbeat dengan sengaja saat aplikasi ditutup/di-background,
 supaya watchdog PLC langsung bekerja.
+
+### 3b. Orientasi Home (Home Back / Home Front) dan Back to Home
+Di layar Manual ada dua tombol **Home Back** dan **Home Front** untuk **memilih orientasi Home**,
+lalu tombol **Back to Home** untuk menjalankan shuttle ke Home itu.
+
+- `Reg[25]` dan `Reg[26]` adalah **tombol sekaligus status**, bukan handshake: PLC **jangan mereset** nilainya.
+- Tekan Home Back → APK menulis `Reg[26]` = 0 lalu `Reg[25]` = 1. Tekan Home Front → `Reg[25]` = 0 lalu `Reg[26]` = 1.
+- Lampu status Home Back / Home Front di APK (tombol hijau dan lampu di kartu Status) dibaca dari `Reg[25]` / `Reg[26]`.
+- **Back to Home** (`Reg[24]`, handshake): PLC membawa shuttle ke Home sesuai orientasi yang bernilai 1, lalu menulis balik `0` ke `Reg[24]`.
+- Tombol hanya aktif di APK saat mode aktif = 4 (Manual), tidak RUN dan tidak EMERGENCY.
+- Nilai ini sebaiknya disimpan **retain** di PLC supaya pilihan tidak hilang saat PLC mati.
 
 ---
 
@@ -136,8 +147,8 @@ PLC menulis tiap scan. `1` = aktif.
 | 52 | DB1.DBW104 | EMERGENCY ditekan — ditampilkan di layar Alarm | V109.0 |
 | 53 | DB1.DBW106 | IDLE | S0.1 |
 | 54 | DB1.DBW108 | STANDBY | S2.0 / S4.4 **[?]** |
-| 55 | DB1.DBW110 | Home Back | V294.0 |
-| 56 | DB1.DBW112 | Home Front | V295.0 |
+| 55 | DB1.DBW110 | *dicadangkan* (dulu status Home Back — APK sekarang membaca status dari Reg[25]) | V294.0 |
+| 56 | DB1.DBW112 | *dicadangkan* (dulu status Home Front — APK sekarang membaca status dari Reg[26]) | V295.0 |
 | 57 | DB1.DBW114 | Backward limit | V373.0 |
 | 58 | DB1.DBW116 | Forward limit | V374.0 |
 | 59 | DB1.DBW118 | Baterai OK (1 = OK, 0 = LOW) **[?]** | V37.0 |

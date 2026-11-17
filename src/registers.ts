@@ -35,6 +35,8 @@ export const CMD = {
   resetAlarm: 22,
   buzzer: 23,
   backToHome: 24,
+  homeBack: 25, // home orientation: the app writes 1 to the chosen one and 0 to the other;
+  homeFront: 26, // these words are also the Home Back / Home Front status (not a handshake)
 } as const;
 export type Cmd = keyof typeof CMD;
 
@@ -67,5 +69,9 @@ export type Status = Record<(typeof STATUS_KEYS)[number], number>;
 export const READ_COUNT = STATUS_START + STATUS_KEYS.length;
 
 export function decodeStatus(regs: number[]): Status {
-  return Object.fromEntries(STATUS_KEYS.map((k, i) => [k, regs[STATUS_START + i] ?? 0])) as Status;
+  const st = Object.fromEntries(STATUS_KEYS.map((k, i) => [k, regs[STATUS_START + i] ?? 0])) as Status;
+  // Home Back / Home Front status comes from the orientation words the app writes (Reg 25/26); Reg 55/56 unused.
+  st.homeBack = regs[CMD.homeBack] ?? 0;
+  st.homeFront = regs[CMD.homeFront] ?? 0;
+  return st;
 }

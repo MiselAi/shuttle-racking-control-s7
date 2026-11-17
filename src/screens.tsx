@@ -5,7 +5,7 @@ export const LOGO_FULL = require('../assets/brand/logo-full.png');
 export const LOGO_MARK = require('../assets/brand/logo-mark.png');
 import type { AlarmDef } from './addressMap';
 import { AppConfig, isValidIp } from './config';
-import { isLoad, isPick, isRunMode, MODE, modeName, QTY_REQ, SETTING_GROUPS } from './registers';
+import { CMD, isLoad, isPick, isRunMode, MODE, modeName, QTY_REQ, SETTING_GROUPS } from './registers';
 import { Btn, C, Card, Cols, Copyright, HoldBtn, Lamp, s, useZoom } from './ui';
 import type { useShuttle } from './useShuttle';
 
@@ -314,8 +314,19 @@ export function ManualScreen({ sh, run }: { sh: Sh; run: Run }) {
         <Btn big label="STOP" color={C.red} onPress={() => run('Stop', () => sh.sendCmd('stop'))} disabled={!sh.connected} />
       </View>
       <Card title="Home">
-        <Btn label="Back to Home" onPress={() => run('Back to home', () => sh.sendCmd('backToHome'))} disabled={!can} />
-        <Text style={[s.note, z.note, { marginTop: 6 }]}>Perintahkan shuttle kembali ke posisi Home.</Text>
+        <Text style={[s.label, z.label, { marginBottom: 6 }]}>Orientasi Home</Text>
+        <View style={s.row}>
+          <View style={{ flex: 1 }}>
+            <Btn label="◀ HOME BACK" outline={!st.homeBack} color={st.homeBack ? C.green : C.brand} onPress={() => run('Pilih Home Back', async () => { await sh.write(CMD.homeFront, 0); await sh.write(CMD.homeBack, 1); })} disabled={!can} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Btn label="HOME FRONT ▶" outline={!st.homeFront} color={st.homeFront ? C.green : C.brand} onPress={() => run('Pilih Home Front', async () => { await sh.write(CMD.homeBack, 0); await sh.write(CMD.homeFront, 1); })} disabled={!can} />
+          </View>
+        </View>
+        <View style={{ marginTop: 10 }}>
+          <Btn label="Back to Home" onPress={() => run('Back to home', () => sh.sendCmd('backToHome'))} disabled={!can} />
+        </View>
+        <Text style={[s.note, z.note, { marginTop: 6 }]}>Pilih orientasi Home (hijau = terpilih), lalu tekan Back to Home.</Text>
       </Card>
       </View>
       <StatusCard sh={sh} />

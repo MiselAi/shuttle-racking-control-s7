@@ -2,7 +2,7 @@
   "expo": {
     "name": "MiNDX Shuttle S7",
     "slug": "shuttle-racking-control-s7",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
