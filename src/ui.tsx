@@ -90,14 +90,36 @@ type BtnProps = {
   big?: boolean;
   outline?: boolean;
   textColor?: string;
+  onHold?: (on: boolean) => void; // HMI-style: true on press, false on release (instead of onPress)
 };
 
-export function Btn({ label, onPress, color = C.brand, disabled, big, outline, textColor }: BtnProps) {
+export function Btn({ label, onPress, color = C.brand, disabled, big, outline, textColor, onHold }: BtnProps) {
   const k = useScale();
+  const held = useRef(false);
+  const sawIn = useRef(false); // a very short tap can fire onPress without onPressIn (react-native-web)
+  const cb = useRef(onHold);
+  cb.current = onHold;
+  const set = (on: boolean) => {
+    if (held.current === on) return;
+    held.current = on;
+    cb.current?.(on);
+  };
+  // Never leave a command at 1: release on unmount or when the button gets disabled while held.
+  useEffect(() => () => set(false), []);
+  useEffect(() => void (disabled && set(false)), [disabled]);
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={
+        onHold
+          ? () => {
+              if (!sawIn.current) (set(true), set(false)); // still a full press: 1, then 0 after the minimum time
+              sawIn.current = false;
+            }
+          : onPress
+      }
+      onPressIn={onHold ? () => ((sawIn.current = true), set(true)) : undefined}
+      onPressOut={onHold ? () => set(false) : undefined}
       disabled={disabled}
       style={({ pressed }) => [
         s.btn,

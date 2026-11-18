@@ -5,12 +5,15 @@ export const LOGO_FULL = require('../assets/brand/logo-full.png');
 export const LOGO_MARK = require('../assets/brand/logo-mark.png');
 import type { AlarmDef } from './addressMap';
 import { AppConfig, isValidIp } from './config';
-import { CMD, isLoad, isPick, isRunMode, MODE, modeName, QTY_REQ, SETTING_GROUPS } from './registers';
+import { CMD, type Cmd, isLoad, isPick, isRunMode, MODE, modeName, QTY_REQ, SETTING_GROUPS } from './registers';
 import { Btn, C, Card, Cols, Copyright, HoldBtn, Lamp, s, useZoom } from './ui';
 import type { useShuttle } from './useShuttle';
 
 type Sh = ReturnType<typeof useShuttle>;
 type Run = (label: string, fn: () => Promise<unknown>) => void;
+
+// HMI-style command button: 1 while pressed, 0 when released (at least 0.5 s).
+const hold = (sh: Sh, run: Run, label: string, c: Cmd) => (on: boolean) => (on ? run(label, () => sh.press(c)) : sh.release(c));
 
 // ---------- Login ----------
 export function LoginScreen({ cfg, onLogin }: { cfg: AppConfig; onLogin: (role: 'operator' | 'maintenance') => void }) {
@@ -97,12 +100,10 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
     setMenu(null);
     run(`Pilih ${modeName(code)}`, () => sh.write(MODE, code));
   };
-  const start = () => {
+  const start = (on: boolean) => {
+    if (on) return run('Start', () => sh.press('start', () => sh.write(QTY_REQ, loadPick ? n : 0)));
+    sh.release('start');
     setConfirm(false);
-    run('Start', async () => {
-      await sh.write(QTY_REQ, loadPick ? n : 0);
-      await sh.sendCmd('start');
-    });
   };
   const sub = menu === 'load' ? [2, 3] : menu === 'pick' ? [6, 7] : [];
   return (
@@ -152,19 +153,19 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
           <Btn big label="START" color={C.green} onPress={() => setConfirm(true)} disabled={!canStart} />
         </View>
         <View style={{ flex: 1 }}>
-          <Btn big label="STOP" color={C.red} onPress={() => run('Stop', () => sh.sendCmd('stop'))} disabled={!sh.connected} />
+          <Btn big label="STOP" color={C.red} onHold={hold(sh, run, 'Stop', 'stop')} disabled={!sh.connected} />
         </View>
       </View>
       <View style={[s.row, { marginBottom: 12 }]}>
         <View style={{ flex: 1 }}>
-          <Btn label="Reset Alarm" color={C.amber} onPress={() => run('Reset alarm', () => sh.sendCmd('resetAlarm'))} disabled={!sh.connected} />
+          <Btn label="Reset Alarm" color={C.amber} onHold={hold(sh, run, 'Reset alarm', 'resetAlarm')} disabled={!sh.connected} />
         </View>
         <View style={{ flex: 1 }}>
           <Btn
             label={st.buzzerEnabled ? '🔔 Buzzer: ON' : '🔕 Buzzer: OFF'}
             color={st.buzzerEnabled ? C.amber : C.muted}
             outline={!st.buzzerEnabled}
-            onPress={() => run(st.buzzerEnabled ? 'Buzzer OFF' : 'Buzzer ON', () => sh.sendCmd('buzzer'))}
+            onHold={hold(sh, run, 'Buzzer', 'buzzer')}
             disabled={!sh.connected}
           />
         </View>
@@ -187,7 +188,7 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
                 <Btn label="Batal" outline onPress={() => setConfirm(false)} />
               </View>
               <View style={{ flex: 1 }}>
-                <Btn label="START" color={C.green} onPress={start} />
+                <Btn label="START" color={C.green} onHold={start} />
               </View>
             </View>
           </View>
@@ -204,7 +205,7 @@ export function AlarmScreen({ sh, run }: { sh: Sh; run: Run }) {
   const [open, setOpen] = useState<AlarmDef | null>(null);
   const st = sh.status;
   if (!st) return null;
-  const reset = () => run('Reset alarm', () => sh.sendCmd('resetAlarm'));
+  const reset = hold(sh, run, 'Reset alarm', 'resetAlarm');
   return (
     <ScrollView contentContainerStyle={{ padding: 12 }}>
       <Cols>
@@ -229,14 +230,14 @@ export function AlarmScreen({ sh, run }: { sh: Sh; run: Run }) {
       <View>
       <View style={s.row}>
         <View style={{ flex: 1 }}>
-          <Btn label="Reset Alarm" color={C.amber} onPress={reset} disabled={!sh.connected} />
+          <Btn label="Reset Alarm" color={C.amber} onHold={reset} disabled={!sh.connected} />
         </View>
         <View style={{ flex: 1 }}>
           <Btn
             label={st.buzzerEnabled ? '🔔 Buzzer: ON' : '🔕 Buzzer: OFF'}
             color={st.buzzerEnabled ? C.amber : C.muted}
             outline={!st.buzzerEnabled}
-            onPress={() => run(st.buzzerEnabled ? 'Buzzer OFF' : 'Buzzer ON', () => sh.sendCmd('buzzer'))}
+            onHold={hold(sh, run, 'Buzzer', 'buzzer')}
             disabled={!sh.connected}
           />
         </View>
@@ -272,7 +273,7 @@ export function AlarmScreen({ sh, run }: { sh: Sh; run: Run }) {
                 <Btn label="Tutup" outline onPress={() => setOpen(null)} />
               </View>
               <View style={{ flex: 1 }}>
-                <Btn label="Reset Alarm" color={C.amber} disabled={!sh.connected} onPress={() => (reset(), setOpen(null))} />
+                <Btn label="Reset Alarm" color={C.amber} disabled={!sh.connected} onHold={(on) => { reset(on); if (!on) setOpen(null); }} />
               </View>
             </View>
           </View>
@@ -311,7 +312,7 @@ export function ManualScreen({ sh, run }: { sh: Sh; run: Run }) {
         <HoldBtn label={'▶\nMAJU'} onChange={jog('forward')} disabled={!can} />
       </View>
       <View style={{ marginBottom: 12 }}>
-        <Btn big label="STOP" color={C.red} onPress={() => run('Stop', () => sh.sendCmd('stop'))} disabled={!sh.connected} />
+        <Btn big label="STOP" color={C.red} onHold={hold(sh, run, 'Stop', 'stop')} disabled={!sh.connected} />
       </View>
       <Card title="Home">
         <Text style={[s.label, z.label, { marginBottom: 6 }]}>Orientasi Home</Text>
@@ -324,7 +325,7 @@ export function ManualScreen({ sh, run }: { sh: Sh; run: Run }) {
           </View>
         </View>
         <View style={{ marginTop: 10 }}>
-          <Btn label="Back to Home" onPress={() => run('Back to home', () => sh.sendCmd('backToHome'))} disabled={!can} />
+          <Btn label="Back to Home" onHold={hold(sh, run, 'Back to home', 'backToHome')} disabled={!can} />
         </View>
         <Text style={[s.note, z.note, { marginTop: 6 }]}>Pilih orientasi Home (hijau = terpilih), lalu tekan Back to Home.</Text>
       </Card>

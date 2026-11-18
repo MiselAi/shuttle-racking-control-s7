@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v0.9
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v1.0
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -33,7 +33,7 @@ Aturan:
 - **Satu word = satu sinyal** (nilai 0/1 atau angka). Tidak ada bit yang digabung.
 - APK **tidak** menulis langsung ke tag kerja PLC. PLC menyalin perintah dari DB1
   ke logikanya **setelah cek interlock**.
-- Perintah dengan **handshake**: APK menulis `1`, PLC menjalankan lalu menulis balik `0`.
+- Perintah = **tombol seperti HMI (momentary)**: APK menulis `1` saat tombol ditekan dan `0` saat dilepas (minimal 0,5 detik). PLC memakai **rising edge** (P_TRIG) dan **tidak perlu mereset**. Lihat §3c.
 
 ### ⚠️ Keamanan PUT/GET
 Dengan PUT/GET aktif, **perangkat apa pun di jaringan WiFi itu bisa membaca dan menulis
@@ -68,11 +68,11 @@ min/max sendiri**; APK juga membatasi.
 
 | Reg | Alamat S7 | Perintah | Jenis | Siapa | Ref. lama |
 |---|---|---|---|---|---|
-| 20 | DB1.DBW40 | Start | handshake | Operator | V204.0 |
-| 21 | DB1.DBW42 | Stop | handshake | Operator | V400.0 |
-| 22 | DB1.DBW44 | Reset alarm | handshake | Operator | V379.0 |
-| 23 | DB1.DBW46 | Buzzer enable/disable (toggle fungsi buzzer) | handshake | Operator | V362.0 |
-| 24 | DB1.DBW48 | Back to Home (shuttle kembali ke posisi Home) | handshake | Maintenance | V381.0 |
+| 20 | DB1.DBW40 | Start | **tombol HMI** | Operator | V204.0 |
+| 21 | DB1.DBW42 | Stop | **tombol HMI** | Operator | V400.0 |
+| 22 | DB1.DBW44 | Reset alarm | **tombol HMI** | Operator | V379.0 |
+| 23 | DB1.DBW46 | Buzzer enable/disable (toggle fungsi buzzer) | **tombol HMI** | Operator | V362.0 |
+| 24 | DB1.DBW48 | Back to Home (shuttle kembali ke posisi Home) | **tombol HMI** | Maintenance | V381.0 |
 | 25 | DB1.DBW50 | **Home Back** — pilih orientasi Home Back, sekaligus status lampu Home Back (lihat §3b) | **pilihan** | Maintenance | V765.0 |
 | 26 | DB1.DBW52 | **Home Front** — pilih orientasi Home Front, sekaligus status lampu Home Front (lihat §3b) | **pilihan** | Maintenance | V766.0 |
 | 30 | DB1.DBW60 | Jog Lifter UP | **tahan** | Maintenance | V348.0 |
@@ -101,9 +101,20 @@ lalu tombol **Back to Home** untuk menjalankan shuttle ke Home itu.
 - `Reg[25]` dan `Reg[26]` adalah **tombol sekaligus status**, bukan handshake: PLC **jangan mereset** nilainya.
 - Tekan Home Back → APK menulis `Reg[26]` = 0 lalu `Reg[25]` = 1. Tekan Home Front → `Reg[25]` = 0 lalu `Reg[26]` = 1.
 - Lampu status Home Back / Home Front di APK (tombol hijau dan lampu di kartu Status) dibaca dari `Reg[25]` / `Reg[26]`.
-- **Back to Home** (`Reg[24]`, handshake): PLC membawa shuttle ke Home sesuai orientasi yang bernilai 1, lalu menulis balik `0` ke `Reg[24]`.
+- **Back to Home** (`Reg[24]`, tombol HMI): PLC membawa shuttle ke Home sesuai orientasi yang bernilai 1, cukup pada rising edge `Reg[24]` (APK sendiri menulis `0` saat tombol dilepas).
 - Tombol hanya aktif di APK saat mode aktif = 4 (Manual), tidak RUN dan tidak EMERGENCY.
 - Nilai ini sebaiknya disimpan **retain** di PLC supaya pilihan tidak hilang saat PLC mati.
+
+### 3c. Tombol perintah seperti HMI (Start, Stop, Reset alarm, Buzzer, Back to Home)
+Tombol `Reg[20]`–`Reg[24]` (DB1.DBW40–DBW48) bekerja **sama seperti tombol HMI momentary**:
+
+- Tombol ditekan → APK menulis `1`. Selama ditahan nilainya tetap `1` (APK **tidak** mengirim berulang).
+- Tombol dilepas → APK menulis `0`. Tekanan sangat singkat tetap dibuat **minimal 0,5 detik** agar PLC pasti melihatnya.
+- PLC menjalankan perintah pada **rising edge** (P_TRIG / R_TRIG), kecuali Stop yang boleh dibaca sebagai level
+  (selama Stop = 1 shuttle tetap berhenti). PLC **tidak perlu mereset** alamat-alamat ini.
+- Jika WiFi putus saat tombol ditahan, nilai `1` bisa tertinggal di PLC. APK mengirim `0` begitu tersambung lagi,
+  tapi PLC **sebaiknya** juga menulis `0` ke `Reg[20..24]` saat watchdog heartbeat (§3a) mendeteksi koneksi putus.
+- Home Back / Home Front (`Reg[25]`/`Reg[26]`) **bukan** tombol HMI: nilainya disimpan (lihat §3b).
 
 ---
 
@@ -130,7 +141,7 @@ Pengaman:
    PLC tetap **wajib** menolak/mengabaikan perubahan `Reg[65]` saat RUN.
 2. Saat Start (`Reg[20]` = 1): PLC cek mode 2/3/5/6/7, IDLE, tidak emergency, tidak ada alarm → mulai RUN.
    Jika lajur sudah penuh (Load) / kosong (Pick): jangan RUN, nyalakan bit alarm yang sesuai (lihat Daftar Alarm).
-   Jika syarat tidak terpenuhi: Start diabaikan (tetap tulis balik `0`).
+   Jika syarat tidak terpenuhi: Start diabaikan.
 3. Tombol gerak manual di APK hanya aktif jika `Reg[65]` = 4, tidak RUN, dan tidak EMERGENCY.
 4. Tiap palet selesai: `Reg[67]` +1. Stop kapan saja menghentikan RUN.
 

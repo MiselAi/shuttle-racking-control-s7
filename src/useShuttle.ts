@@ -7,9 +7,11 @@ import { Io, registerIo, s7Io } from './io';
 import { S7Client } from './s7';
 import { CMD, Cmd, decodeStatus, HEARTBEAT, JOG, Jog } from './registers';
 import { SimulatedShuttle } from './simulator';
+import { cmdButtons } from './cmdButtons';
 
 const CYCLE_MS = 200; // heartbeat + status read; PLC watchdog trips after 500 ms
 const RETRY_MS = 2000;
+const MIN_PRESS_MS = 500; // command buttons stay 1 at least this long, so the PLC always sees the press
 
 // Alarm list in effect for a shuttle (the simulator has its own two).
 export function alarmDefs(cfg: AppConfig, index: number): AlarmDef[] {
@@ -34,6 +36,7 @@ export function useShuttle(cfg: AppConfig, index: number) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const link = useRef<Io | null>(null);
+  const buttons = useRef(cmdButtons(() => link.current, MIN_PRESS_MS)).current;
 
   useEffect(() => {
     let alive = true;
@@ -60,6 +63,7 @@ export function useShuttle(cfg: AppConfig, index: number) {
         if (!l.connected) {
           await l.connect();
           setError(null);
+          await buttons.flush(l); // a release lost while WiFi was down
         }
         beat = (beat + 1) % 32768;
         await l.writeReg(HEARTBEAT, beat);
@@ -92,7 +96,8 @@ export function useShuttle(cfg: AppConfig, index: number) {
       alive = false;
       clearTimeout(timer);
       sub.remove();
-      const off = Object.values(JOG).map((a) => l.writeReg(a, 0).catch(() => undefined));
+      const regs = [...Object.values(JOG), ...buttons.drain()];
+      const off = regs.map((a) => l.writeReg(a, 0).catch(() => undefined));
       Promise.all(off).finally(() => l.close());
       link.current = null;
     };
@@ -104,7 +109,9 @@ export function useShuttle(cfg: AppConfig, index: number) {
     await l.writeReg(reg, value);
   }, []);
 
-  const sendCmd = useCallback((c: Cmd) => write(CMD[c], 1), [write]);
+  // HMI-style command buttons (Start, Stop, Reset alarm, Buzzer, Back to Home).
+  const press = useCallback((c: Cmd, before?: () => Promise<unknown>) => buttons.press(CMD[c], before), [buttons]);
+  const release = useCallback((c: Cmd) => buttons.release(CMD[c]), [buttons]);
   const setJog = useCallback((j: Jog, on: boolean) => write(JOG[j], on ? 1 : 0), [write]);
 
   const status = regs ? decodeStatus(regs) : null;
@@ -123,7 +130,8 @@ export function useShuttle(cfg: AppConfig, index: number) {
     alarms,
     alarmState,
     write,
-    sendCmd,
+    press,
+    release,
     setJog,
   };
 }

@@ -15,6 +15,7 @@ export class SimulatedShuttle {
   private lastBeatAt = 0;
   private pos = 0; // 0 = back end, 100 = front end
   private jobTicks = 0;
+  private prev: Record<number, number> = {}; // last command values, for rising edges
   connected = false;
   onClose?: () => void;
 
@@ -62,11 +63,18 @@ export class SimulatedShuttle {
     if (!linkOk) for (const a of Object.values(JOG)) r[a] = 0;
 
 
-    if (r[CMD.stop]) {
-      r[RUN] = 0;
-      r[CMD.stop] = 0;
-    }
-    if (r[CMD.start]) {
+    // Command buttons are HMI-style (1 while pressed): act on the rising edge, like a P_TRIG.
+    const edge = (reg: number) => {
+      const up = !!r[reg] && !this.prev[reg];
+      this.prev[reg] = r[reg];
+      return up;
+    };
+    // Watchdog also drops held command buttons.
+    if (!linkOk) for (const a of [CMD.start, CMD.stop, CMD.resetAlarm, CMD.buzzer, CMD.backToHome]) r[a] = 0;
+
+    if (r[CMD.stop]) r[RUN] = 0; // level: held Stop keeps it stopped
+    edge(CMD.stop);
+    if (edge(CMD.start) && !r[CMD.stop]) {
       const m = r[ACTIVE_MODE];
       if (idle && !r[EMG] && !r[ALARM] && isRunMode(m)) {
         // Lane already full (Load) or empty (Pick) → alarm instead of running.
@@ -78,21 +86,11 @@ export class SimulatedShuttle {
           this.jobTicks = 0;
         }
       }
-      r[CMD.start] = 0;
     }
-    if (r[CMD.resetAlarm]) {
-      r[ALARM] = 0;
-      r[CMD.resetAlarm] = 0;
-    }
-    if (r[CMD.buzzer]) {
-      r[BUZZER] = r[BUZZER] ? 0 : 1;
-      r[CMD.buzzer] = 0;
-    }
+    if (edge(CMD.resetAlarm)) r[ALARM] = 0;
+    if (edge(CMD.buzzer)) r[BUZZER] = r[BUZZER] ? 0 : 1;
     const manual = idle && r[ACTIVE_MODE] === 4;
-    if (r[CMD.backToHome]) {
-      if (manual) this.pos = r[CMD.homeFront] ? 100 : 0; // goes to the home chosen by the app
-      r[CMD.backToHome] = 0;
-    }
+    if (edge(CMD.backToHome) && manual) this.pos = r[CMD.homeFront] ? 100 : 0; // goes to the home chosen by the app
 
     if (r[RUN] && ++this.jobTicks % 15 === 0) {
       const m = r[ACTIVE_MODE];
