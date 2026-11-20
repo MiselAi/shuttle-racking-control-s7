@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppConfig, loadConfig, saveConfig } from './src/config';
 import { AlarmScreen, LOGO_MARK, LoginScreen, ManualScreen, OperasiScreen, PengaturanScreen, SettingPlcScreen } from './src/screens';
@@ -48,6 +48,7 @@ export default function App() {
 function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onLogout: () => void; onSave: (c: AppConfig) => Promise<void> }) {
   const [idx, setIdx] = useState(0);
   const [tab, setTab] = useState<Tab>('operasi');
+  const [linkInfo, setLinkInfo] = useState(false);
   const [flash, setFlash] = useState<{ text: string; bad: boolean } | null>(null);
   const sh = useShuttle(cfg, idx);
   const alarms = sh.alarms;
@@ -66,6 +67,12 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
     );
   }, []);
 
+  const q =
+    sh.quality === 'ok'
+      ? { bg: '#DDF3E4', dot: C.green, text: `Terhubung ${sh.ip} · ${sh.stats.rttMs} ms` }
+      : sh.quality === 'weak'
+        ? { bg: '#FFF1D6', dot: C.amber, text: `Sinyal lemah, menyambung ulang ${sh.ip}…` }
+        : { bg: '#FBE3E1', dot: C.red, text: `Terputus ${sh.ip}${sh.error ? ` (${sh.error})` : ''}` };
   const tabs = TABS.filter((t) => role === 'maintenance' || !t.maint);
   return (
     <View style={{ flex: 1 }}>
@@ -115,12 +122,17 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
                 <Text style={{ fontWeight: '800', color: C.ink, fontSize: 12 * k }}>SIMULASI</Text>
               </View>
             ) : null}
-            <View style={{ backgroundColor: sh.connected ? '#DDF3E4' : '#FBE3E1', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: sh.connected ? C.green : C.red, marginRight: 6 }} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Info koneksi"
+              onPress={() => setLinkInfo(true)}
+              style={{ backgroundColor: q.bg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}
+            >
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: q.dot, marginRight: 6 }} />
               <Text style={{ color: C.ink, fontSize: 13 * k, flexShrink: 1 }} numberOfLines={1}>
-                {sh.connected ? `Terhubung ${sh.ip}` : `Menghubungkan ${sh.ip}…${sh.error ? ` (${sh.error})` : ''}`}
+                {q.text}
               </Text>
-            </View>
+            </Pressable>
           </View>
         </View>
 
@@ -141,6 +153,27 @@ function Main({ cfg, role, onLogout, onSave }: { cfg: AppConfig; role: Role; onL
             <SettingPlcScreen key={idx} sh={sh} run={run} />
           )}
         </View>
+
+        <Modal transparent visible={linkInfo} animationType="fade" onRequestClose={() => setLinkInfo(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}>
+            <View style={[s.card, { padding: 20, width: '100%', maxWidth: 560 * k, maxHeight: '90%', alignSelf: 'center' }]}>
+              <Text style={{ fontSize: 20 * k, fontWeight: '800', color: C.ink, marginBottom: 8 }}>Koneksi {cfg.shuttles[idx]?.name} ({sh.ip})</Text>
+              <Text style={{ fontSize: 15 * k, color: C.ink }}>Putus sejak dibuka: {sh.stats.drops} kali</Text>
+              <Text style={{ fontSize: 15 * k, color: C.ink, marginBottom: 10 }}>
+                Waktu respon PLC: {sh.stats.rttMs} ms (terlama {sh.stats.maxRttMs} ms)
+              </Text>
+              <ScrollView style={{ maxHeight: 300 * k, marginBottom: 12 }}>
+                {sh.stats.events.length === 0 ? <Text style={{ color: C.muted, fontSize: 14 * k }}>Belum ada kejadian.</Text> : null}
+                {sh.stats.events.map((e, i) => (
+                  <Text key={i} style={{ fontSize: 14 * k, color: e.text.startsWith('Putus') ? C.red : C.ink, marginBottom: 4 }}>
+                    {new Date(e.at).toLocaleTimeString('id-ID')}  {e.text}
+                  </Text>
+                ))}
+              </ScrollView>
+              <Btn label="Tutup" outline onPress={() => setLinkInfo(false)} />
+            </View>
+          </View>
+        </Modal>
 
         {flash ? (
           <View style={{ position: 'absolute', right: 12, bottom: 12, maxWidth: 420, backgroundColor: flash.bad ? C.red : C.ink, borderRadius: 10, padding: 12 }}>

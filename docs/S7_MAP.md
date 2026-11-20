@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v1.1
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v1.2
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -96,6 +96,22 @@ WiFi bisa putus saat tombol jog sedang ditahan. PLC wajib:
 
 APK juga menghentikan heartbeat dengan sengaja saat aplikasi ditutup/di-background,
 supaya watchdog PLC langsung bekerja.
+
+**Koneksi WiFi saat shuttle bergerak.** Access point ikut terpasang di shuttle, jadi saat shuttle masuk jauh ke lajur rak
+sinyal ke tablet bisa macet 0,5–2 detik (jarak dan rak besi). Perilaku APK:
+- Jawaban PLC ditunggu sampai **3 detik** sebelum dianggap putus; setelah putus, APK menyambung ulang tiap **0,3 detik**
+  (10 kali pertama), lalu tiap 2 detik.
+- Status di APK: hijau **Terhubung** (dengan waktu respon ms), kuning **Sinyal lemah, menyambung ulang** (putus < 5 detik),
+  merah **Terputus**. Ketuk status itu untuk melihat jumlah putus, waktu respon terlama, dan catatan kejadian.
+
+Saran untuk program PLC:
+- Selama WiFi macet, heartbeat (`Reg[49]`) ikut berhenti. Untuk **jog manual** tetap pakai batas **500 ms** (keamanan).
+- Untuk **mode auto yang sedang RUN**, jangan hentikan shuttle hanya karena heartbeat hilang sebentar. Bila ingin
+  berhenti saat APK putus, pakai batas lebih longgar (misalnya **3–5 detik**).
+
+Saran WiFi: pakai pita **2,4 GHz** (lebih tembus rak dibanding 5 GHz) dengan channel tetap; arahkan antena access point
+ke lorong/posisi operator; di tablet, saat muncul pesan "WiFi tidak ada akses internet", pilih **tetap tersambung**, dan
+matikan fitur pindah otomatis ke data seluler / WiFi lain.
 
 ### 3b. Orientasi Home (Home Back / Home Front) dan Back to Home
 Di layar Manual ada dua tombol **Home Back** dan **Home Front** untuk **memilih orientasi Home**,

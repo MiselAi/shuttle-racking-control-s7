@@ -33,7 +33,7 @@ class IsoTcpModule : Module() {
         try {
           s.tcpNoDelay = true
           s.connect(InetSocketAddress(host, port), timeoutMs)
-          s.soTimeout = timeoutMs
+          s.soTimeout = 10000 // reads: the JS side decides when an answer is late
         } catch (e: Exception) {
           closeQuietly(s)
           throw CodedException("ERR_CONNECT", e.message ?: "Tidak bisa terhubung", e)

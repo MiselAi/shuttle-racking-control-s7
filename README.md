@@ -17,6 +17,7 @@ Bisa dipasang berdampingan dengan versi Modbus (nama paket berbeda: `com.shuttle
 - Peta Alamat (PIN Admin): alamat tiap item bisa diubah per shuttle, tipe WORD (DBW) atau BIT (DBX), validasi bentrok, nilai live, ekspor/impor CSV.
 - Pengaturan: IP tiap shuttle, port (102), nomor DB, rack/slot, PIN, dan **mode simulasi** (coba tanpa PLC).
 - Heartbeat tiap 200 ms untuk watchdog di PLC; heartbeat berhenti saat aplikasi ditutup.
+- Koneksi tahan gangguan WiFi singkat (tunggu jawaban 3 detik, sambung ulang 0,3 detik); status hijau/kuning/merah, ketuk untuk catatan koneksi.
 
 PIN bawaan: Operator `1111`, Maintenance `9999`, Admin `0000`. **Ganti di menu Pengaturan sebelum dipakai.**
 Mode simulasi aktif saat pertama dibuka; matikan di Pengaturan untuk tersambung ke PLC.

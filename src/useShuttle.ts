@@ -10,7 +10,13 @@ import { SimulatedShuttle } from './simulator';
 import { cmdButtons } from './cmdButtons';
 
 const CYCLE_MS = 200; // heartbeat + status read; PLC watchdog trips after 500 ms
+const RETRY_FAST_MS = 300; // first reconnect attempts: WiFi gaps are usually short
 const RETRY_MS = 2000;
+const FAST_RETRIES = 10;
+const WEAK_MS = 5000; // a gap shorter than this shows as "sinyal lemah", not "terputus"
+
+export type LinkEvent = { at: number; text: string };
+type Stats = { drops: number; rttMs: number; maxRttMs: number; lastOkAt: number; events: LinkEvent[] };
 const MIN_PRESS_MS = 500; // command buttons stay 1 at least this long, so the PLC always sees the press
 
 // Alarm list in effect for a shuttle (the simulator has its own two).
@@ -36,6 +42,8 @@ export function useShuttle(cfg: AppConfig, index: number) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const link = useRef<Io | null>(null);
+  const stats = useRef<Stats>({ drops: 0, rttMs: 0, maxRttMs: 0, lastOkAt: 0, events: [] });
+  const [, bump] = useState(0); // re-render on every failed attempt, so "lemah" turns into "terputus"
   const buttons = useRef(cmdButtons(() => link.current, MIN_PRESS_MS)).current;
 
   useEffect(() => {
@@ -43,6 +51,13 @@ export function useShuttle(cfg: AppConfig, index: number) {
     let active = AppState.currentState === 'active';
     let beat = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let fails = 0;
+    let up = false;
+    const st: Stats = (stats.current = { drops: 0, rttMs: 0, maxRttMs: 0, lastOkAt: 0, events: [] });
+    const note = (text: string) => {
+      st.events.unshift({ at: Date.now(), text });
+      st.events.length = Math.min(st.events.length, 30);
+    };
     let l: Io;
     try {
       l = makeLink(cfg, ip, index);
@@ -65,10 +80,18 @@ export function useShuttle(cfg: AppConfig, index: number) {
           setError(null);
           await buttons.flush(l); // a release lost while WiFi was down
         }
+        const t0 = Date.now();
         beat = (beat + 1) % 32768;
         await l.writeReg(HEARTBEAT, beat);
         const { regs: r, alarms: ab } = await l.poll();
         if (!alive) return;
+        const now = Date.now();
+        st.rttMs = now - t0;
+        st.maxRttMs = Math.max(st.maxRttMs, st.rttMs);
+        if (!up) note(st.lastOkAt ? `Tersambung lagi setelah ${((now - st.lastOkAt) / 1000).toFixed(1)} detik` : 'Tersambung');
+        st.lastOkAt = now;
+        up = true;
+        fails = 0;
         setRegs(r);
         setAlarmBits(ab);
         setConnected(true);
@@ -76,9 +99,17 @@ export function useShuttle(cfg: AppConfig, index: number) {
       } catch (e) {
         if (!alive) return;
         l.close();
+        const msg = (e as Error).message;
+        if (up) {
+          st.drops++;
+          note(`Putus: ${msg}`);
+        }
+        up = false;
+        fails++;
         setConnected(false);
-        setError((e as Error).message);
-        schedule(RETRY_MS);
+        setError(msg);
+        bump((n) => n + 1);
+        schedule(fails <= FAST_RETRIES ? RETRY_FAST_MS : RETRY_MS);
       }
     }
     // Leaving the app stops the heartbeat on purpose, so the PLC watchdog stops any jog.
@@ -88,6 +119,7 @@ export function useShuttle(cfg: AppConfig, index: number) {
       else {
         clearTimeout(timer);
         l.close();
+        up = false;
         setConnected(false);
       }
     });
@@ -127,6 +159,9 @@ export function useShuttle(cfg: AppConfig, index: number) {
     error,
     regs,
     status,
+    // ok / weak (short gap, reconnecting) / down
+    quality: connected ? 'ok' : stats.current.lastOkAt && Date.now() - stats.current.lastOkAt < WEAK_MS ? 'weak' : 'down',
+    stats: stats.current,
     alarms,
     alarmState,
     write,

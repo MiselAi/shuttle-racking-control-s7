@@ -38,7 +38,8 @@ export class S7Client {
   constructor(transport: FrameTransport, host: string, opts: S7Options) {
     this.transport = transport;
     this.host = host;
-    this.opts = { port: 102, rack: 0, slot: 1, timeoutMs: 1000, ...opts };
+    // 3 s per answer: WiFi on a moving shuttle can stall for a second or two without being lost.
+    this.opts = { port: 102, rack: 0, slot: 1, timeoutMs: 3000, ...opts };
   }
 
   get connected() {
@@ -48,7 +49,7 @@ export class S7Client {
   async connect(): Promise<void> {
     const { port, rack, slot, timeoutMs } = this.opts;
     try {
-      await this.transport.open(this.host, port, timeoutMs * 2);
+      await this.transport.open(this.host, port, Math.min(timeoutMs, 2000)); // TCP connect: fail fast, retry soon
       // COTP connection request: local TSAP 0x0100, remote TSAP = PG (0x01) + rack/slot.
       const remoteTsap = 0x0100 | (rack * 0x20 + slot);
       const cc = await this.withTimeout(

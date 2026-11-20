@@ -200,3 +200,17 @@ test('S7 alarm bits are read per address; invalid ones read 0', async () => {
   assert.deepEqual(alarms, [0, 1, 1, 0, 0]);
   c.close();
 });
+
+test('a slow answer (WiFi stall of 1.2 s) does not drop the link with the default timeout', async () => {
+  const base = netTransport();
+  let delay = 0;
+  const slow: FrameTransport = { ...base, open: base.open.bind(base), close: base.close.bind(base),
+    request: async (f) => { const r = await base.request(f); await new Promise((x) => setTimeout(x, delay)); return r; } };
+  const c = new S7Client(slow, '127.0.0.1', { port: PORT, db: 1 });
+  await c.connect();
+  delay = 1200;
+  await c.writeWord(1, 30, 777);
+  assert.deepEqual([...(await c.readBytes(1, 30, 2))], [777 >> 8, 777 & 0xff]);
+  assert.equal(c.connected, true);
+  c.close();
+});
