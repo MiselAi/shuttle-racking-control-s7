@@ -1,4 +1,4 @@
-# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v1.0
+# Peta Data S7 (ISO TCP) — APK MiNDX Shuttle S7 (S7-1200) — DRAFT v1.1
 
 Untuk **programmer PLC**. APK Android ini terhubung ke tiap shuttle lewat WiFi memakai
 **protokol S7 / ISO TCP (port 102)**, dan HANYA membaca/menulis word di **satu DB** (default **DB1**).
@@ -33,7 +33,7 @@ Aturan:
 - **Satu word = satu sinyal** (nilai 0/1 atau angka). Tidak ada bit yang digabung.
 - APK **tidak** menulis langsung ke tag kerja PLC. PLC menyalin perintah dari DB1
   ke logikanya **setelah cek interlock**.
-- Perintah = **tombol seperti HMI (momentary)**: APK menulis `1` saat tombol ditekan dan `0` saat dilepas (minimal 0,5 detik). PLC memakai **rising edge** (P_TRIG) dan **tidak perlu mereset**. Lihat §3c.
+- Perintah = **tombol seperti HMI**: Start dan Buzzer **maintained (toggle)**, perintah lain **momentary** (`1` saat ditekan, `0` saat dilepas, minimal 0,5 detik). Lihat §3c.
 
 ### ⚠️ Keamanan PUT/GET
 Dengan PUT/GET aktif, **perangkat apa pun di jaringan WiFi itu bisa membaca dan menulis
@@ -44,7 +44,7 @@ semua DB non-optimized dan memori PLC**, bukan hanya DB1. Karena itu:
 
 ---
 
-## 2. Setting (Reg[0]–Reg[9], baca/tulis)
+## 2. Setting (Reg[0]–Reg[10], baca/tulis)
 
 PLC memakai nilai ini langsung (atau menyalinnya ke tag setting) dan **wajib membatasi
 min/max sendiri**; APK juga membatasi.
@@ -60,7 +60,8 @@ min/max sendiri**; APK juga membatasi.
 | 6 | DB1.DBW12 | Target pulse forward middle sensor | pulse | VW2012 |
 | 7 | DB1.DBW14 | **[?] dicadangkan** (VW2014 lama) — tidak dipakai APK | | VW2014 |
 | 8 | DB1.DBW16 | Target pulse backward middle sensor | pulse | VW2016 |
-| 9 | DB1.DBW18 | Pick reposition | **[?]** | VW2018 |
+| 9 | DB1.DBW18 | Pick reposition **forward** | **[?]** | VW2018 |
+| 10 | DB1.DBW20 | Pick reposition **backward** (baru) | **[?]** | — |
 
 ---
 
@@ -68,13 +69,15 @@ min/max sendiri**; APK juga membatasi.
 
 | Reg | Alamat S7 | Perintah | Jenis | Siapa | Ref. lama |
 |---|---|---|---|---|---|
-| 20 | DB1.DBW40 | Start | **tombol HMI** | Operator | V204.0 |
-| 21 | DB1.DBW42 | Stop | **tombol HMI** | Operator | V400.0 |
-| 22 | DB1.DBW44 | Reset alarm | **tombol HMI** | Operator | V379.0 |
-| 23 | DB1.DBW46 | Buzzer enable/disable (toggle fungsi buzzer) | **tombol HMI** | Operator | V362.0 |
-| 24 | DB1.DBW48 | Back to Home (shuttle kembali ke posisi Home) | **tombol HMI** | Maintenance | V381.0 |
+| 20 | DB1.DBW40 | Start — 1 = Start ON (lihat §3c) | **maintained** | Operator | V204.0 |
+| 21 | DB1.DBW42 | Stop (APK juga menulis Start = 0) | **momentary** | Operator | V400.0 |
+| 22 | DB1.DBW44 | Reset alarm | **momentary** | Operator | V379.0 |
+| 23 | DB1.DBW46 | Buzzer — 1 = fungsi buzzer ON, 0 = OFF | **maintained** | Operator | V362.0 |
+| 24 | DB1.DBW48 | Back to Home (shuttle kembali ke posisi Home) | **momentary** | Maintenance | V381.0 |
 | 25 | DB1.DBW50 | **Home Back** — pilih orientasi Home Back, sekaligus status lampu Home Back (lihat §3b) | **pilihan** | Maintenance | V765.0 |
 | 26 | DB1.DBW52 | **Home Front** — pilih orientasi Home Front, sekaligus status lampu Home Front (lihat §3b) | **pilihan** | Maintenance | V766.0 |
+| 27 | DB1.DBW54 | **Reset driver motor lifter** (layar Manual) | **momentary** | Maintenance | — |
+| 28 | DB1.DBW56 | **Reset driver motor travel** (layar Manual) | **momentary** | Maintenance | — |
 | 30 | DB1.DBW60 | Jog Lifter UP | **tahan** | Maintenance | V348.0 |
 | 31 | DB1.DBW62 | Jog Lifter DOWN | **tahan** | Maintenance | V349.0 |
 | 32 | DB1.DBW64 | Jog MAJU (forward) | **tahan** | Maintenance | V347.0 |
@@ -105,16 +108,20 @@ lalu tombol **Back to Home** untuk menjalankan shuttle ke Home itu.
 - Tombol hanya aktif di APK saat mode aktif = 4 (Manual), tidak RUN dan tidak EMERGENCY.
 - Nilai ini sebaiknya disimpan **retain** di PLC supaya pilihan tidak hilang saat PLC mati.
 
-### 3c. Tombol perintah seperti HMI (Start, Stop, Reset alarm, Buzzer, Back to Home)
-Tombol `Reg[20]`–`Reg[24]` (DB1.DBW40–DBW48) bekerja **sama seperti tombol HMI momentary**:
+### 3c. Jenis tombol perintah (seperti HMI)
 
-- Tombol ditekan → APK menulis `1`. Selama ditahan nilainya tetap `1` (APK **tidak** mengirim berulang).
-- Tombol dilepas → APK menulis `0`. Tekanan sangat singkat tetap dibuat **minimal 0,5 detik** agar PLC pasti melihatnya.
-- PLC menjalankan perintah pada **rising edge** (P_TRIG / R_TRIG), kecuali Stop yang boleh dibaca sebagai level
-  (selama Stop = 1 shuttle tetap berhenti). PLC **tidak perlu mereset** alamat-alamat ini.
-- Jika WiFi putus saat tombol ditahan, nilai `1` bisa tertinggal di PLC. APK mengirim `0` begitu tersambung lagi,
-  tapi PLC **sebaiknya** juga menulis `0` ke `Reg[20..24]` saat watchdog heartbeat (§3a) mendeteksi koneksi putus.
-- Home Back / Home Front (`Reg[25]`/`Reg[26]`) **bukan** tombol HMI: nilainya disimpan (lihat §3b).
+| Tombol | Reg | Jenis | Perilaku APK | PLC |
+|---|---|---|---|---|
+| Start | 20 | **maintained (toggle)** | Tekan (setelah konfirmasi) → `1` dan tetap `1`. Tekan lagi → `0`. STOP juga menulis `0`. | Jalan pada rising edge; `0` = berhenti. Boleh mereset ke `0` sendiri (job selesai, alarm, ditolak) — tombol di APK ikut OFF. |
+| Buzzer | 23 | **maintained (toggle)** | Tekan → `1`, tekan lagi → `0`. Tulisan ON/OFF di tombol dibaca dari `Reg[23]`. | Pakai sebagai level: `1` = fungsi buzzer aktif. |
+| Stop, Reset alarm, Back to Home, Reset driver lifter, Reset driver travel | 21, 22, 24, 27, 28 | **momentary** | `1` selama ditekan, `0` saat dilepas (minimal 0,5 detik). | Rising edge (P_TRIG); Stop boleh level. **Tidak perlu mereset.** |
+
+- APK **tidak** mengirim nilai berulang; nilai ditulis sekali dan tersimpan di PLC.
+- Jika WiFi putus saat tombol momentary ditahan, `1` bisa tertinggal. APK mengirim `0` begitu tersambung lagi,
+  tapi PLC **sebaiknya** menulis `0` ke tombol momentary (21, 22, 24, 27, 28) saat watchdog heartbeat (§3a) mendeteksi putus.
+  Untuk Start yang maintained, PLC sebaiknya juga menghentikan RUN dan menulis Start = `0` saat koneksi putus.
+- Home Back / Home Front (`Reg[25]`/`Reg[26]`) adalah pilihan yang disimpan (lihat §3b).
+- Semua alamat `Reg[20]`–`Reg[28]` (DB1.DBW40–DBW56) bisa diubah di Peta Alamat APK.
 
 ---
 
@@ -223,4 +230,4 @@ perlu **PIN Admin**), per shuttle, atau diimpor dari **CSV** (kolom `alamat,pesa
 2. Daftar alarm (alamat bit, pesan, cara mengatasi) dan daftar kode pesan status.
 3. Standby: sumber sinyalnya di program baru.
 4. Arti sinyal baterai (1 = OK atau 1 = LOW) — APK menganggap 1 = OK.
-5. Batas min/max setting dan satuan Pick reposition.
+5. Batas min/max setting dan satuan Pick reposition forward / backward.

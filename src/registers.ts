@@ -23,20 +23,23 @@ export const SETTING_GROUPS = [
     items: [
       { reg: 6, label: 'Target pulse forward middle sensor', unit: 'pulse', min: 0, max: 32767 },
       { reg: 8, label: 'Target pulse backward middle sensor', unit: 'pulse', min: 0, max: 32767 },
-      { reg: 9, label: 'Pick reposition', unit: '', min: 0, max: 32767 },
+      { reg: 9, label: 'Pick reposition forward', unit: '', min: 0, max: 32767 },
+      { reg: 10, label: 'Pick reposition backward', unit: '', min: 0, max: 32767 },
     ],
   },
 ] as const;
 // shortcut: min/max are placeholders until the PLC programmer gives real limits; reg 7 (ex VW2014) skipped on purpose.
 
 export const CMD = {
-  start: 20,
+  start: 20, // maintained (toggle): 1 = Start on until the app writes 0 (press again, or Stop)
   stop: 21,
   resetAlarm: 22,
-  buzzer: 23,
+  buzzer: 23, // maintained (toggle): 1 = buzzer function on
   backToHome: 24,
   homeBack: 25, // home orientation: the app writes 1 to the chosen one and 0 to the other;
   homeFront: 26, // these words are also the Home Back / Home Front status (not a handshake)
+  resetDriverLifter: 27, // momentary (HMI-style)
+  resetDriverTravel: 28,
 } as const;
 export type Cmd = keyof typeof CMD;
 

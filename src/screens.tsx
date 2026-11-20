@@ -14,6 +14,9 @@ type Run = (label: string, fn: () => Promise<unknown>) => void;
 
 // HMI-style command button: 1 while pressed, 0 when released (at least 0.5 s).
 const hold = (sh: Sh, run: Run, label: string, c: Cmd) => (on: boolean) => (on ? run(label, () => sh.press(c)) : sh.release(c));
+// Stop is HMI-style too, and also switches the maintained Start off.
+const stopHold = (sh: Sh, run: Run) => (on: boolean) =>
+  on ? run('Stop', async () => { await sh.press('stop'); await sh.write(CMD.start, 0); }) : sh.release('stop');
 
 // ---------- Login ----------
 export function LoginScreen({ cfg, onLogin }: { cfg: AppConfig; onLogin: (role: 'operator' | 'maintenance') => void }) {
@@ -100,10 +103,15 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
     setMenu(null);
     run(`Pilih ${modeName(code)}`, () => sh.write(MODE, code));
   };
-  const start = (on: boolean) => {
-    if (on) return run('Start', () => sh.press('start', () => sh.write(QTY_REQ, loadPick ? n : 0)));
-    sh.release('start');
+  // Start and Buzzer are maintained (toggle): the button shows the word's own value.
+  const startOn = sh.regs?.[CMD.start] === 1;
+  const buzzerOn = sh.regs?.[CMD.buzzer] === 1;
+  const start = () => {
     setConfirm(false);
+    run('Start ON', async () => {
+      await sh.write(QTY_REQ, loadPick ? n : 0);
+      await sh.write(CMD.start, 1);
+    });
   };
   const sub = menu === 'load' ? [2, 3] : menu === 'pick' ? [6, 7] : [];
   return (
@@ -150,10 +158,17 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
       </Card>
       <View style={[s.row, { marginBottom: 12 }]}>
         <View style={{ flex: 1 }}>
-          <Btn big label="START" color={C.green} onPress={() => setConfirm(true)} disabled={!canStart} />
+          <Btn
+            big
+            label={startOn ? '▶ START: ON' : 'START'}
+            color={C.green}
+            outline={!startOn}
+            onPress={() => (startOn ? run('Start OFF', () => sh.write(CMD.start, 0)) : setConfirm(true))}
+            disabled={startOn ? !sh.connected : !canStart}
+          />
         </View>
         <View style={{ flex: 1 }}>
-          <Btn big label="STOP" color={C.red} onHold={hold(sh, run, 'Stop', 'stop')} disabled={!sh.connected} />
+          <Btn big label="STOP" color={C.red} onHold={stopHold(sh, run)} disabled={!sh.connected} />
         </View>
       </View>
       <View style={[s.row, { marginBottom: 12 }]}>
@@ -162,10 +177,10 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
         </View>
         <View style={{ flex: 1 }}>
           <Btn
-            label={st.buzzerEnabled ? '🔔 Buzzer: ON' : '🔕 Buzzer: OFF'}
-            color={st.buzzerEnabled ? C.amber : C.muted}
-            outline={!st.buzzerEnabled}
-            onHold={hold(sh, run, 'Buzzer', 'buzzer')}
+            label={buzzerOn ? '🔔 Buzzer: ON' : '🔕 Buzzer: OFF'}
+            color={buzzerOn ? C.amber : C.muted}
+            outline={!buzzerOn}
+            onPress={() => run(buzzerOn ? 'Buzzer OFF' : 'Buzzer ON', () => sh.write(CMD.buzzer, buzzerOn ? 0 : 1))}
             disabled={!sh.connected}
           />
         </View>
@@ -188,7 +203,7 @@ export function OperasiScreen({ sh, run }: { sh: Sh; run: Run }) {
                 <Btn label="Batal" outline onPress={() => setConfirm(false)} />
               </View>
               <View style={{ flex: 1 }}>
-                <Btn label="START" color={C.green} onHold={start} />
+                <Btn label="START" color={C.green} onPress={start} />
               </View>
             </View>
           </View>
@@ -312,7 +327,7 @@ export function ManualScreen({ sh, run }: { sh: Sh; run: Run }) {
         <HoldBtn label={'▶\nMAJU'} onChange={jog('forward')} disabled={!can} />
       </View>
       <View style={{ marginBottom: 12 }}>
-        <Btn big label="STOP" color={C.red} onHold={hold(sh, run, 'Stop', 'stop')} disabled={!sh.connected} />
+        <Btn big label="STOP" color={C.red} onHold={stopHold(sh, run)} disabled={!sh.connected} />
       </View>
       <Card title="Home">
         <Text style={[s.label, z.label, { marginBottom: 6 }]}>Orientasi Home</Text>
@@ -328,6 +343,17 @@ export function ManualScreen({ sh, run }: { sh: Sh; run: Run }) {
           <Btn label="Back to Home" onHold={hold(sh, run, 'Back to home', 'backToHome')} disabled={!can} />
         </View>
         <Text style={[s.note, z.note, { marginTop: 6 }]}>Pilih orientasi Home (hijau = terpilih), lalu tekan Back to Home.</Text>
+      </Card>
+      <Card title="Reset driver motor">
+        <View style={s.row}>
+          <View style={{ flex: 1 }}>
+            <Btn label="Reset Lifter" color={C.amber} onHold={hold(sh, run, 'Reset driver lifter', 'resetDriverLifter')} disabled={!sh.connected || !!st.run} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Btn label="Reset Travel" color={C.amber} onHold={hold(sh, run, 'Reset driver travel', 'resetDriverTravel')} disabled={!sh.connected || !!st.run} />
+          </View>
+        </View>
+        <Text style={[s.note, z.note, { marginTop: 6 }]}>Tombol momentary: 1 selama ditekan, 0 saat dilepas.</Text>
       </Card>
       </View>
       <StatusCard sh={sh} />

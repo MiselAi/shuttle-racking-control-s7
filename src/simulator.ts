@@ -20,7 +20,7 @@ export class SimulatedShuttle {
   onClose?: () => void;
 
   constructor() {
-    [40, 80, 30, 20, 50, 30, 1200, 0, 1200, 50].forEach((v, i) => (this.r[i] = v));
+    [40, 80, 30, 20, 50, 30, 1200, 0, 1200, 50, 50].forEach((v, i) => (this.r[i] = v));
     for (const k of [READY, IDLE, CMD.homeBack, BW_LIMIT, BATTERY, P_DOWN]) this.r[k] = 1;
     this.r[COUNTER] = 3;
   }
@@ -70,10 +70,13 @@ export class SimulatedShuttle {
       return up;
     };
     // Watchdog also drops held command buttons.
-    if (!linkOk) for (const a of [CMD.start, CMD.stop, CMD.resetAlarm, CMD.buzzer, CMD.backToHome]) r[a] = 0;
+    if (!linkOk) for (const a of [CMD.stop, CMD.resetAlarm, CMD.backToHome, CMD.resetDriverLifter, CMD.resetDriverTravel]) r[a] = 0;
 
     if (r[CMD.stop]) r[RUN] = 0; // level: held Stop keeps it stopped
     edge(CMD.stop);
+    // Start is maintained: rising edge starts a job, 0 stops it; a finished job clears Start.
+    const wasStart = !!this.prev[CMD.start];
+    if (wasStart && !r[CMD.start]) r[RUN] = 0;
     if (edge(CMD.start) && !r[CMD.stop]) {
       const m = r[ACTIVE_MODE];
       if (idle && !r[EMG] && !r[ALARM] && isRunMode(m)) {
@@ -87,8 +90,9 @@ export class SimulatedShuttle {
         }
       }
     }
+    if (r[CMD.start] && !r[RUN]) r[CMD.start] = 0; // refused (alarm, wrong mode, ...): Start drops back
     if (edge(CMD.resetAlarm)) r[ALARM] = 0;
-    if (edge(CMD.buzzer)) r[BUZZER] = r[BUZZER] ? 0 : 1;
+    r[BUZZER] = r[CMD.buzzer] ? 1 : 0; // maintained switch
     const manual = idle && r[ACTIVE_MODE] === 4;
     if (edge(CMD.backToHome) && manual) this.pos = r[CMD.homeFront] ? 100 : 0; // goes to the home chosen by the app
 
@@ -97,7 +101,7 @@ export class SimulatedShuttle {
       r[DONE]++;
       r[COUNTER] = Math.min(LANE_CAP, Math.max(0, r[COUNTER] + (isPick(m) ? -1 : isLoad(m) ? 1 : 0)));
       const laneDone = (isLoad(m) && r[COUNTER] >= LANE_CAP) || (isPick(m) && r[COUNTER] === 0);
-      if ((r[TARGET] && r[DONE] >= r[TARGET]) || laneDone || m === 5) r[RUN] = 0;
+      if ((r[TARGET] && r[DONE] >= r[TARGET]) || laneDone || m === 5) r[RUN] = r[CMD.start] = 0;
     }
 
     if (manual && linkOk) {
